@@ -8,6 +8,7 @@
         Slave temperatures   ✅
         Long reads           ✅ (x823)
         Combine devices      ✅
+        WiFi                 ❌
 
 */
 
