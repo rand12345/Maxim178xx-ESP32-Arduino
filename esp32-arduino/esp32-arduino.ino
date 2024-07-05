@@ -3,11 +3,11 @@
   Todo:
         PEC validation       ✅
         Read balance shunts  ✅
-        Manual balance       ✅
-        Auto balance         N/A
+        Manual balance       ✅ (x823)
+        Auto balance         ✅ (x854)
         Slave temperatures   ✅
-        Long reads           ✅
-        Combine devices      ❌
+        Long reads           ✅ (x823)
+        Combine devices      ✅
 
 */
 
