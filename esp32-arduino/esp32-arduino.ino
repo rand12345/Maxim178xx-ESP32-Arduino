@@ -9,6 +9,7 @@
         Long reads           ✅ (x823)
         Combine devices      ✅
         WiFi                 ❌
+        MQTT                 ❌
 
 */
 
@@ -17,14 +18,45 @@
 #include "driver/twai.h"
 #include <freertos/task.h>
 
+#ifdef WIFI
+#include "ESP32MQTTClient.h"
+#include <WiFi.h>
+#include "secrets.h"
+#include <ArduinoJson.h>
+ESP32MQTTClient mqttClient;  // all params are set later
+#endif
+
+
 void setup() {
   Serial.begin(BAUDRATE);
+// Wifi
+#ifdef WIFI
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(SSID, PASS);
+  Serial.println("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println(WiFi.status());
+  }
+  Serial.println(WiFi.localIP());
+
+  mqttClient.setURI(MQTT_SERVER, MQTT_USERNAME, MQTT_PASSWORD);
+
+  char mqttClientName[50];
+  uint64_t chipid = ESP.getEfuseMac();  // The chip ID is essentially the MAC address
+  snprintf(mqttClientName, 50, "MAXIM-%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
+  mqttClient.setMqttClientName(mqttClientName);
+
+  mqttClient.enableLastWillMessage("lwt", "Maxim going offline");
+  mqttClient.setKeepAlive(30);
+  mqttClient.loopStart();
+
   initializeEEPROM();
   // Contactors off
   digitalWrite(PRECHARGE_PIN, 0);
   digitalWrite(MAIN_CONTACTOR_PIN, 0);
   initialisation.Arduino_SPI_init();
-
+#endif
   delay(500);
 
   initialisation.MAX178X_init_sequence();
@@ -44,8 +76,6 @@ void setup() {
 
   print_config();
 
-  // esp_task_wdt_init(&twdt_config);
-
   // CAN Frame queues
   rx_queue = xQueueCreate(100, sizeof(twai_message_t));
   tx_queue = xQueueCreate(100, sizeof(twai_message_t));
@@ -59,17 +89,16 @@ void interrupt_pin() {
   Serial.println("******************** INT LOW ********************");  // placeholder for MAX17841b interrupt handling
 }
 
+
 void loop() {
-  while (1) {
-    vTaskDelay(pdMS_TO_TICKS(100));
-    if (Serial.available() > 0) {
-      char incomingByte = Serial.read();
-      handle_keypress(incomingByte);
-    }
+  vTaskDelay(pdMS_TO_TICKS(100));
+  if (Serial.available() > 0) {
+    char incomingByte = Serial.read();
+    handle_keypress(incomingByte);
   }
 
-}  // App in threads only
 
+}  // App in threads only
 
 void TWAI_Processing_Task(void *pvParameters) {
   char contactor = 0;
@@ -269,23 +298,25 @@ void TWAI_Task(void *pvParameters) {
 
 void SPI_Task(void *pvParameters) {
   Maxim *maxim = Maxim::build();
-  // std::unique_ptr<Maxim> maxim(Maxim::build());  // Unique ownership of Maxim object
-
   Serial.println("SPI_Task Maxim instanitated");
-
 
 #ifdef MAXIM_WATCHDOG
   esp_task_wdt_add(NULL);
 #endif
   while (1) {
-    // UBaseType_t stackHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
-    // Serial.printf("Task [%s] - stack high water mark: %u\n", "SPI_Task", stackHighWaterMark);
 
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis1000 >= interval1000) {
       previousMillis1000 = millis();
 
       inverter_data = maxim->read_pack();
+
+#ifdef WIFI
+      char *jsonChar = BMSDataToJson(maxim_data);
+      mqttClient.publish(MQTT_TOPIC, jsonChar, 0, false);
+      free(jsonChar);
+#endif
+
       if (has_errors(&maxim_data)) {
         Serial.println("SPI_Task Maxim display error");
         maxim->display_error();
@@ -352,3 +383,51 @@ void handle_keypress(char incomingByte) {
     ESP.restart();  // Reboot the ESP
   }
 }
+
+
+#ifdef WIFI
+void onMqttConnect(esp_mqtt_client_handle_t client) {
+  if (mqttClient.isMyTurn(client))  // can be omitted if only one client
+  {
+    Serial.println("MQTT connected");
+  }
+}
+
+void handleMQTT(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
+  auto *event = static_cast<esp_mqtt_event_handle_t>(event_data);
+  mqttClient.onEventCallback(event);
+}
+
+
+// Function to convert BMS_Data to JSON char pointer
+char *BMSDataToJson(BMS_Data data) {
+  // Create a JSON document
+  JsonDocument doc;
+  doc["timestamp"] = data.timestamp;
+
+  JsonArray errors = doc["errors"].to<JsonArray>();
+  for (int i = 0; i < data.num_modules + 1; i++) {
+    errors.add(data.errors[i]);
+  }
+
+  doc["num_modules"] = static_cast<int>(data.num_modules);
+  doc["num_bal_cells"] = static_cast<int>(data.num_bal_cells);
+  doc["milliamps"] = data.milliamps;
+  doc["cell_mv_min"] = data.cell_mv_min;
+  doc["cell_mv_max"] = data.cell_mv_max;
+  doc["cell_temp_min"] = data.cell_temp_min;
+  doc["cell_temp_max"] = data.cell_temp_max;
+  doc["pack_volts"] = data.pack_volts;
+  doc["soc"] = data.soc;
+
+  // Convert JSON document to string
+  String jsonString;
+  serializeJson(doc, jsonString);
+
+  // Allocate memory for char array and copy the string into it
+  char *jsonCharArray = (char *)malloc(jsonString.length() + 1);
+  strcpy(jsonCharArray, jsonString.c_str());
+
+  return jsonCharArray;
+}
+#endif

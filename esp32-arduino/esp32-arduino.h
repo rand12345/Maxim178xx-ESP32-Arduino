@@ -8,7 +8,8 @@
 #include "Initialisation.h"
 #include "CAN_config.h"
 #include <esp_task_wdt.h>
-
+#include "mqtt_client.h"
+#include "ESP32MQTTClient.h"
 
 #define EXAMPLE_TAG "TWAI Alert and Recovery"
 #define PRECHARGE 1

@@ -6,9 +6,24 @@
 #include "soc/gpio_sig_map.h"
 #include <EEPROM.h>
 
+// enables wifi and mqtt
+
+#define WIFI
+/* 
+
+secrets.h file
+
+const char* SSID = "Acesss Point Name";
+const char* PASS = "Password";
+const char* MQTT_SERVER  = "mqtt://IP:PORT";
+const char* MQTT_USERNAME = "";
+const char* MQTT_PASSWORD = "";
+const char* MQTT_TOPIC = "";
+*/
+
 // Factory settings - can be edited altered in EEPROM menu
 
-#define F_EXPECTED_PACKS 18                //
+#define F_EXPECTED_PACKS 18               //
 #define F_CELLS_PER_SLAVE 12              //
 #define F_PANIC_MAX_CELL_MILLIVOLTS 4250  // opens contactors
 #define F_MAX_CELL_MILLIVOLTS 4200        // shuts down charging
@@ -46,7 +61,7 @@
 #define LV_INVERTER 0x305
 
 #define PRECHARGE_DWELL_TIME_MS 200  // time between activating precharge and main contactors
-#define CAN_TX_INTERSPACE_MS 2 // time between subsequent transmitted CAN frames
+#define CAN_TX_INTERSPACE_MS 2       // time between subsequent transmitted CAN frames
 
 // Custom GPIO pins per module type
 #if CONFIG_IDF_TARGET_ESP32C6
@@ -107,7 +122,6 @@ struct Configuration {
   uint8_t max_discharge;
   uint8_t pack_voltage_divisor;
 };
-
 
 int max_cells();                // (config.num_modules * config.cells_per_slave)
 int max_slave_voltage();        // (config.cells_per_slave * config.panic_max_cell_millivolts / 1000)
