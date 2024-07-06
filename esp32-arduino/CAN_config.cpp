@@ -11,10 +11,10 @@ void CanBus::summary(BMS_Data *local_result, bool show) {
   }
   const char *chargeStatus = (CANmilliamps < 0) ? "Charging" : "Discharging";
   Serial.printf(
-    "\n"
-    "Cell Min: %dmV Max: %dmV Delta: %d Balancing: %d \n"
-    "Pack Volts: %.1fV SoC: %.1f Current: %.1fA %s. \n"
-    "Max Charge Rate: %dA Max Discharge Rate: %dA \n",
+    "\n\r"
+    "Cell Min: %dmV Max: %dmV Delta: %d Balancing: %d \n\r"
+    "Pack Volts: %.1fV SoC: %.1f Current: %.1fA %s. \n\r"
+    "Max Charge Rate: %dA Max Discharge Rate: %dA \n\r",
     local_result->cell_mv_min,
     local_result->cell_mv_max,
     (local_result->cell_mv_max - local_result->cell_mv_min),
@@ -26,7 +26,7 @@ void CanBus::summary(BMS_Data *local_result, bool show) {
     max_charge(local_result),
     max_discharge(local_result));
 
-  Serial.printf("Temp Min: %.2fºC Max: %.2fºC \n\n", local_result->cell_temp_min, local_result->cell_temp_max);
+  Serial.printf("Temp Min: %.2fºC Max: %.2fºC \n\n\r", local_result->cell_temp_min, local_result->cell_temp_max);
 }
 
 char CanBus::canread(twai_message_t rxFrame, QueueHandle_t tx_queue, BMS_Data *local_result) {
@@ -36,7 +36,7 @@ char CanBus::canread(twai_message_t rxFrame, QueueHandle_t tx_queue, BMS_Data *l
   if (!timestamp_in_range(local_result, DATA_TIMEOUT_MS)) {
     no_errors = false;
     long age = millis() - local_result->timestamp;
-    Serial.printf("Last data reading is too old (%dms)\n", age);
+    Serial.printf("Last data reading is too old (%dms)\n\r", age);
     return (inverter_sent | (no_errors << 1));
   }
 
@@ -185,7 +185,7 @@ void CanBus::BMS_ComHV(BMS_Data *result, twai_message_t rxFrame, QueueHandle_t t
 
   if (filter_data_array((const char *)rxFrame.data, Fox_TimeStamp, 2)) {
     if (print_readings) {
-      Serial.printf("Inverter Time: 20%d-%02d-%02d %02d:%02d:%02d\n", rxFrame.data[2], rxFrame.data[3], rxFrame.data[4], rxFrame.data[5], rxFrame.data[6], rxFrame.data[7]);
+      Serial.printf("Inverter Time: 20%d-%02d-%02d %02d:%02d:%02d\n\r", rxFrame.data[2], rxFrame.data[3], rxFrame.data[4], rxFrame.data[5], rxFrame.data[6], rxFrame.data[7]);
     }
     return;
   }
@@ -464,22 +464,23 @@ short max_discharge(const BMS_Data *result) {
 
 void send_to_queue(QueueHandle_t tx_queue, twai_message_t *tx_msg) {
   if (xQueueSend(tx_queue, (void *)tx_msg, pdMS_TO_TICKS(10)) != pdPASS) {
-    Serial.printf("Failed to queue message for transmission\n");
+    Serial.printf("Failed to queue message for transmission\n\r");
   }
 }
 
 bool check(const BMS_Data *result) {
   short cell_data_crc = values_crc(result);  // validate cell crc with warning count
   if (cell_data_crc == last_data_crc) {
-    if (last_data_crc_fail_count < 50) {
+    if (last_data_crc_fail_count < 10) {
       last_data_crc_fail_count++;
       // this needs moving to a data request only XXX
-      Serial.printf("Data Warn: Last data reading was identical more than (50) requests at uptime %d secs, error counter %d\10n", int(millis() * 0.001), last_data_crc_fail_count);
+      Serial.printf("Data Warn: Last data reading was identical more than (10) requests at uptime %d secs, error counter %d\10n", int(millis() * 0.001), last_data_crc_fail_count);
     } else {
       no_errors = false;
-      Serial.println("Data Error: Data readings have been identical over 50 cycles, data rejected");
+      Serial.println("Data Error: Data readings have been identical over 10 cycles, data rejected");
       return false;
     }
   }
+  last_data_crc_fail_count--;
   return true;
 }

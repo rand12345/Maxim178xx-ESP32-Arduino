@@ -111,7 +111,7 @@ void Maxim823Device::read_cell_temp() {
     }
     if ((int16_t)temp > MAX_SLAVE_TEMP) {
       data->errors[module] |= ERROR_TEMP_HIGH;
-      Serial.printf("Error: Module %d Temperature High, Measured: %d mV, Limit: %d mV\n", int(module), temp, MAX_SLAVE_TEMP);
+      Serial.printf("Error: Module %d Temperature High, Measured: %d mV, Limit: %d mV\n\r", int(module), temp, MAX_SLAVE_TEMP);
     }
     module++;
   }
@@ -148,7 +148,7 @@ void Maxim823Device::cell_V() {
       }
       if (cell_mv < config.min_cell_millivolts) {
         data->errors[module] |= ERROR_CELL_VOLT_LOW;
-        Serial.printf("Error: Module %d Cell %d Cell Voltage Low, Measured: %d mV, Limit: %d mV\n", int(module), int(cell_pointer - ADDR_CELL1REG), cell_mv, config.min_cell_millivolts);
+        Serial.printf("Error: Module %d Cell %d Cell Voltage Low, Measured: %d mV, Limit: %d mV\n\r", int(module), int(cell_pointer - ADDR_CELL1REG), cell_mv, config.min_cell_millivolts);
         for (int i = 0; i < 8; i++) {
           Serial.printf(" %x,", SPI_return[i]);
         }
@@ -157,7 +157,7 @@ void Maxim823Device::cell_V() {
       }
       if (cell_mv > config.panic_max_cell_millivolts) {
         data->errors[module] |= ERROR_CELL_VOLT_HIGH;
-        Serial.printf("Error: Module %d Cell %d Cell Voltage High, Measured: %d mV, Limit: %d mV\n", int(module), int(cell_pointer - ADDR_CELL1REG), cell_mv, config.panic_max_cell_millivolts);
+        Serial.printf("Error: Module %d Cell %d Cell Voltage High, Measured: %d mV, Limit: %d mV\n\r", int(module), int(cell_pointer - ADDR_CELL1REG), cell_mv, config.panic_max_cell_millivolts);
       }
       module++;
     }
@@ -174,12 +174,12 @@ void Maxim823Device::block_V() {
     data->pack_volts += block_voltage;
 
     if (block_voltage > max_slave_voltage()) {
-      Serial.printf("Error: Module %d Voltage High, Measured: %d mV, Limit: %d mV\n", int(module), block_voltage, max_slave_voltage());
+      Serial.printf("Error: Module %d Voltage High, Measured: %d mV, Limit: %d mV\n\r", int(module), block_voltage, max_slave_voltage());
       data->errors[module] |= ERROR_SLAVE_VOLT_HIGH;
     }
     if (block_voltage < min_slave_voltage()) {
       data->errors[module] |= ERROR_SLAVE_VOLT_LOW;
-      Serial.printf("Error: Module %d Voltage Low, Measured: %d mV, Limit: %d mV\n", int(module), block_voltage, min_slave_voltage());
+      Serial.printf("Error: Module %d Voltage Low, Measured: %d mV, Limit: %d mV\n\r", int(module), block_voltage, min_slave_voltage());
     }
     module++;
   }

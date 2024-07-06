@@ -19,7 +19,7 @@ void Maxim::init_values() {
 }
 
 BMS_Data Maxim::read_pack() {
-  init_values();  // reset min/max
+  init_values();                                     // reset min/max
   data->errors[data->num_modules + 1] = INCOMPLETE;  // cleared on successful read, packs +1 are global errors
 
   // setup scan parameters
@@ -48,6 +48,13 @@ BMS_Data Maxim::read_pack() {
 
 
 
+void Maxim::print_balance_bits() {
+  for (int module = 0; module < data->num_modules; module++) {
+    for (char i = 0; i < config.cells_per_slave; i++) {
+      Serial.printf("%d:%d ", i + 1, (data->balance_bits[module] & (1 << i)) ? 1 : 0);
+    }
+  }
+}
 void Maxim::display_error() {
   for (char i = 0; i < data->num_modules; i++) {
     char error = data->errors[i];
@@ -56,31 +63,31 @@ void Maxim::display_error() {
     Serial.printf("Module %d ", i);
 
     if (error & ERROR_CELL_DELTA_HIGH) {
-      Serial.printf("Error: Cell Delta High\n");
+      Serial.printf("Error: Cell Delta High\n\r");
     }
     if (error & ERROR_CELL_VOLT_HIGH) {
-      Serial.printf("Error: Cell Voltage High\n");
+      Serial.printf("Error: Cell Voltage High\n\r");
     }
     if (error & ERROR_CELL_VOLT_LOW) {
-      Serial.printf("Error: Cell Voltage Low\n");
+      Serial.printf("Error: Cell Voltage Low\n\r");
     }
     if (error & ERROR_TEMP_HIGH) {
-      Serial.printf("Error: Temperature High\n");
+      Serial.printf("Error: Temperature High\n\r");
     }
     if (error & ERROR_SLAVE_VOLT_HIGH) {
-      Serial.printf("Error: Slave Voltage High\n");
+      Serial.printf("Error: Slave Voltage High\n\r");
     }
     if (error & ERROR_SLAVE_VOLT_LOW) {
-      Serial.printf("Error: Slave Voltage Low\n");
+      Serial.printf("Error: Slave Voltage Low\n\r");
     }
     if (error & PEC_ERROR) {
-      Serial.printf("Error: SPI data PEC Error\n");
+      Serial.printf("Error: SPI data PEC Error\n\r");
     }
     if (error & INCOMPLETE) {
-      Serial.printf("Error: Data read incomplete\n");
+      Serial.printf("Error: Data read incomplete\n\r");
     }
     if (error & STALE_DATA) {
-      Serial.printf("Error: Data is too old\n");
+      Serial.printf("Error: Data is too old\n\r");
     }
   }
 }
@@ -106,7 +113,7 @@ void cell_debug(const BMS_Data *local_result) {
     }
 
     // Add temperature information for this module and print the line
-    snprintf(buffer + len, sizeof(buffer) - len, "IC Temp: %d \n", local_result->die_temp[module]);
+    snprintf(buffer + len, sizeof(buffer) - len, "IC Temp: %d \n\r", local_result->die_temp[module]);
     Serial.print(buffer);
   }
 }

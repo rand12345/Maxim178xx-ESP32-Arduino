@@ -7,11 +7,11 @@ int max_cells() {
   return val;
 }
 int max_slave_voltage() {
-  int val = (config.cells_per_slave * config.panic_max_cell_millivolts / 1000);
+  int val = (config.cells_per_slave * config.panic_max_cell_millivolts / 1000) + 1;
   return val;
 }
 int min_slave_voltage() {
-  int val = (config.cells_per_slave * config.min_cell_millivolts / 1000);
+  int val = (config.cells_per_slave * config.min_cell_millivolts / 1000) - 1;
   return val;
 }
 int max_pack_voltage_cutoff() {
@@ -34,9 +34,9 @@ void reset_btn() {
   pinMode(RESET_EEPROM_PIN, INPUT_PULLUP);
   delay(1000);
   if (digitalRead(RESET_EEPROM_PIN) == LOW) {
-    Serial.println("\n\nEEPROM CONFIG EDIT - ALL PERIPHERALS OFFLINE UNTIL REBOOT\n\n");
+    Serial.println("\n\nEEPROM CONFIG EDIT - ALL PERIPHERALS OFFLINE UNTIL REBOOT\n\n\r");
     eeprom_menu();
-    Serial.println("\n\n\n\nRebooting...\n\n\n\n");
+    Serial.println("\n\n\n\nRebooting...\n\n\n\n\r");
     delay(1000);
     ESP.restart();
   }
@@ -96,12 +96,12 @@ void eeprom_menu() {
     default:
       Serial.println("Unknown command. Type 'd' to display config, 'r' to reset, 's' for settings.");
   }
-  Serial.println("\nExited EEPROM menu\n");
+  Serial.println("\nExited EEPROM menu\n\r");
 }
 
 void displayConfig() {
   Serial.println("\nCurrent Configuration:");
-  Serial.printf("1. num_modules: %d (discovered)\n", (int)config.num_modules);
+  Serial.printf("1. num_modules: %d (discovered)\n\r", (int)config.num_modules);
   Serial.println("2. cells_per_slave: " + String(config.cells_per_slave));
   Serial.println("3. panic_max_cell_millivolts: " + String(config.panic_max_cell_millivolts));
   Serial.println("4. max_cell_millivolts: " + String(config.max_cell_millivolts));
@@ -187,32 +187,32 @@ bool changeSetting(char settingNumber) {
 }
 
 void print_config() {
-  Serial.printf("\nSystem Settings:\n");
-  Serial.printf("config.num_modules: %d\n", config.num_modules);
-  Serial.printf("config.cells_per_slave: %d\n", config.cells_per_slave);
-  Serial.printf("config.shunt_on_time_ms: %d ms\n", config.shunt_on_time_ms);
-  Serial.printf("config.panic_max_cell_millivolts: %d mV (opens contactors)\n", config.panic_max_cell_millivolts);
-  Serial.printf("config.max_cell_millivolts: %d mV (shuts down charging)\n", config.max_cell_millivolts);
-  Serial.printf("config.min_cell_millivolts: %d mV (opens contactors)\n", config.min_cell_millivolts);
-  Serial.printf("config.delta_cell_millivolts_max: %d mV (max cell imbalance)\n", config.delta_cell_millivolts_max);
-  Serial.printf("max_slave_voltage: %d V\n", max_slave_voltage());
-  Serial.printf("min_slave_voltage: %d V\n", min_slave_voltage());
-  Serial.printf("config.balance_mv_threshold: %d mV (pack will stop balancing when cells are under this value)\n", config.balance_mv_threshold);
-  Serial.printf("config.balance_mv_hys: %d mV (target cell delta)\n", config.balance_mv_hys);
-  Serial.printf("config.slave_kwh: %.2f kWh\n", config.slave_kwh);
-  Serial.printf("config.max_soc: %d %% (halt charging)\n", config.max_soc);
-  Serial.printf("config.min_soc: %d %% (halt discharging)\n", config.min_soc);
-  Serial.printf("config.max_charge: %d A (rate in amps - desired W/min pack volts)\n", config.max_charge);
-  Serial.printf("config.max_discharge: %d A (rate in amps)\n", config.max_discharge);
-  Serial.printf("max_pack_voltage_cutoff: %d V \n", max_pack_voltage_cutoff());
-  Serial.printf("low_pack_voltage_cutoff: %d V \n", low_pack_voltage_cutoff());
-  Serial.printf("DATA_TIMEOUT_MS: %d ms (unique cell data timeout from the Maxim interface)\n", DATA_TIMEOUT_MS);
-  Serial.printf("WDT_TIMEOUT_MS: %d ms (1 minute)\n", WDT_TIMEOUT_MS);
+  Serial.printf("\nSystem Settings:\n\r");
+  Serial.printf("config.num_modules: %d\n\r", config.num_modules);
+  Serial.printf("config.cells_per_slave: %d\n\r", config.cells_per_slave);
+  Serial.printf("config.shunt_on_time_ms: %d ms\n\r", config.shunt_on_time_ms);
+  Serial.printf("config.panic_max_cell_millivolts: %d mV (opens contactors)\n\r", config.panic_max_cell_millivolts);
+  Serial.printf("config.max_cell_millivolts: %d mV (shuts down charging)\n\r", config.max_cell_millivolts);
+  Serial.printf("config.min_cell_millivolts: %d mV (opens contactors)\n\r", config.min_cell_millivolts);
+  Serial.printf("config.delta_cell_millivolts_max: %d mV (max cell imbalance)\n\r", config.delta_cell_millivolts_max);
+  Serial.printf("max_slave_voltage: %d V\n\r", max_slave_voltage());
+  Serial.printf("min_slave_voltage: %d V\n\r", min_slave_voltage());
+  Serial.printf("config.balance_mv_threshold: %d mV (pack will stop balancing when cells are under this value)\n\r", config.balance_mv_threshold);
+  Serial.printf("config.balance_mv_hys: %d mV (target cell delta)\n\r", config.balance_mv_hys);
+  Serial.printf("config.slave_kwh: %.2f kWh\n\r", config.slave_kwh);
+  Serial.printf("config.max_soc: %d %% (halt charging)\n\r", config.max_soc);
+  Serial.printf("config.min_soc: %d %% (halt discharging)\n\r", config.min_soc);
+  Serial.printf("config.max_charge: %d A (rate in amps - desired W/min pack volts)\n\r", config.max_charge);
+  Serial.printf("config.max_discharge: %d A (rate in amps)\n\r", config.max_discharge);
+  Serial.printf("max_pack_voltage_cutoff: %d V \n\r", max_pack_voltage_cutoff());
+  Serial.printf("low_pack_voltage_cutoff: %d V \n\r", low_pack_voltage_cutoff());
+  Serial.printf("DATA_TIMEOUT_MS: %d ms (unique cell data timeout from the Maxim interface)\n\r", DATA_TIMEOUT_MS);
+  Serial.printf("WDT_TIMEOUT_MS: %d ms (1 minute)\n\r", WDT_TIMEOUT_MS);
 #ifdef MAXIM_WATCHDOG
-  Serial.printf("MAXIM_WATCHDOG: enabled. Valid Maxim data must be received or ESP will be reset based on WDT_TIMEOUT_MS. \n");
+  Serial.printf("MAXIM_WATCHDOG: enabled. Valid Maxim data must be received or ESP will be reset based on WDT_TIMEOUT_MS. \n\r");
 #endif
 #ifdef INVERTER_WATCHDOG
-  Serial.printf("INVERTER_WATCHDOG: enabled. Valid inverter CAN frames must be received or ESP will be reset based on WDT_TIMEOUT_MS. \n");
+  Serial.printf("INVERTER_WATCHDOG: enabled. Valid inverter CAN frames must be received or ESP will be reset based on WDT_TIMEOUT_MS. \n\r");
 #endif
   Serial.println();
 }

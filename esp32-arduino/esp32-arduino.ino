@@ -104,6 +104,7 @@ void TWAI_Processing_Task(void *pvParameters) {
   char contactor = 0;
   char status = 0;
   unsigned long summary_time = 0;
+  unsigned long mqtt_time = 0;
 
 #ifdef INVERTER_WATCHDOG
   esp_task_wdt_add(NULL);
@@ -162,10 +163,18 @@ void TWAI_Processing_Task(void *pvParameters) {
     if ((summary_time + 2000) < millis()) {
       can_bus.summary(&inverter_data, print_readings);
       if (print_readings) {
-        Serial.printf("Uptime %.1fs\n", ((millis() - starttime) * 0.001));
-        Serial.printf("Contactors: Precharge: %d | Main: %d\n\n", contactor & 1, contactor > 1);
+        Serial.printf("Uptime %.1fs\n\r", ((millis() - starttime) * 0.001));
+        Serial.printf("Contactors: Precharge: %d | Main: %d\n\n\r", contactor & 1, contactor > 1);
       }
       summary_time = millis();
+    }
+    if ((mqtt_time + 2000) < millis()) {
+#ifdef WIFI
+      char *jsonChar = BMSDataToJson(inverter_data);
+      mqttClient.publish(MQTT_TOPIC, jsonChar, 0, false);
+      free(jsonChar);
+#endif
+      mqtt_time = millis();
     }
   }
 }
@@ -224,13 +233,13 @@ void TWAI_Task(void *pvParameters) {
     }
     if (alerts_triggered & TWAI_ALERT_BUS_ERROR) {
       Serial.println("Alert: A (Bit, Stuff, CRC, Form, ACK) error has occurred on the bus.");
-      Serial.printf("Bus error count: %lu\n", twaistatus.bus_error_count);
+      Serial.printf("Bus error count: %lu\n\r", twaistatus.bus_error_count);
     }
     if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL) {
       Serial.println("Alert: The RX queue is full causing a received frame to be lost.");
       Serial.printf("RX buffered: %lu\t", twaistatus.msgs_to_rx);
       Serial.printf("RX missed: %lu\t", twaistatus.rx_missed_count);
-      Serial.printf("RX overrun %lu\n", twaistatus.rx_overrun_count);
+      Serial.printf("RX overrun %lu\n\r", twaistatus.rx_overrun_count);
     }
     if (alerts_triggered & TWAI_ALERT_BUS_OFF) {
       ESP_LOGI(EXAMPLE_TAG, "Bus Off state");
@@ -310,12 +319,6 @@ void SPI_Task(void *pvParameters) {
       previousMillis1000 = millis();
 
       inverter_data = maxim->read_pack();
-
-#ifdef WIFI
-      char *jsonChar = BMSDataToJson(maxim_data);
-      mqttClient.publish(MQTT_TOPIC, jsonChar, 0, false);
-      free(jsonChar);
-#endif
 
       if (has_errors(&maxim_data)) {
         Serial.println("SPI_Task Maxim display error");
@@ -400,7 +403,7 @@ void handleMQTT(void *handler_args, esp_event_base_t base, int32_t event_id, voi
 
 
 // Function to convert BMS_Data to JSON char pointer
-char *BMSDataToJson(BMS_Data data) {
+char *BMSDataToJson(BMS_Data &data) {
   // Create a JSON document
   JsonDocument doc;
   doc["timestamp"] = data.timestamp;

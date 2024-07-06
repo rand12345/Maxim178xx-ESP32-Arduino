@@ -50,7 +50,7 @@ int Initialisation::helloall() {
     delay(3000);
     ESP.restart();
   };
-  Serial.printf("Number of slaves in daisy chain is : %d\n", (int)SPI_return[3]);
+  Serial.printf("Number of slaves in daisy chain is : %d\n\r", (int)SPI_return[3]);
   return check;
 }
 

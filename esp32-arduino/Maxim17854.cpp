@@ -14,10 +14,10 @@ int *Maxim852Device::spi_read(char module, char reg) {
   PEC_VALUE = pec.pec_code(3, command, reg, DATA_CHECK);  // PEC calculation for BITS READALL,ADDR_SCANCTRL,DATA_CHECK
   // bms_SPI.SPI_commands(7, WR_LD_Q0, 6, command, reg, DATA_CHECK, PEC_VALUE, ALIVE_COUNTER);
   bms_SPI.SPI_commands(7, WR_LD_Q0, read_num, command, reg, DATA_CHECK, PEC_VALUE, ALIVE_COUNTER);
-  // Serial.printf("Reader: %x %x %x %x %x %x %x \n", WR_LD_Q0, read_num, command, reg, DATA_CHECK, PEC_VALUE, ALIVE_COUNTER);
+  // Serial.printf("Reader: %x %x %x %x %x %x %x \n\r", WR_LD_Q0, read_num, command, reg, DATA_CHECK, PEC_VALUE, ALIVE_COUNTER);
   bms_SPI.SPI_commands(1, WR_NXT_LD_Q0);
   SPI_return = bms_SPI.SPI_read_register(read_num, RD_NXT_MSG);
-  // Serial.printf("Read:   %x %x %x %x %x %x %x \n", SPI_return[0], SPI_return[1], SPI_return[2], SPI_return[3], SPI_return[4], SPI_return[5], SPI_return[6]);
+  // Serial.printf("Read:   %x %x %x %x %x %x %x \n\r", SPI_return[0], SPI_return[1], SPI_return[2], SPI_return[3], SPI_return[4], SPI_return[5], SPI_return[6]);
   // SPI command for Read Load Que
   PEC_check_status = pec.PEC_Check(1, 5, SPI_return);  // Checks the calculated and hardware returned PEC
   bms_SPI.SPI_commands(2, READ_RX_INTERRUPT_FLAGS, 0x00);
@@ -39,7 +39,7 @@ int *Maxim852Device::spi_write(char module, char reg, short reg_data) {
   // if certain command -> SPI_commands(X, ....) change X and NULL_XX to suit
   PEC_VALUE = pec.pec_code(4, command, reg, lsb, msb);                                        // PEC calculation for BITS WRITEALL, ADDR_MEASUREEN, 0xFF, 0xFF
   bms_SPI.SPI_commands(8, WR_LD_Q0, 0x05, command, reg, lsb, msb, PEC_VALUE, ALIVE_COUNTER);  // only 128
-  // Serial.printf("Writer: %x %x %x %x %x %x %x %x\n", WR_LD_Q0, 0x05, command, reg, lsb, msb, PEC_VALUE, ALIVE_COUNTER);
+  // Serial.printf("Writer: %x %x %x %x %x %x %x %x\n\r", WR_LD_Q0, 0x05, command, reg, lsb, msb, PEC_VALUE, ALIVE_COUNTER);
   bms_SPI.SPI_commands(1, WR_NXT_LD_Q0);
   SPI_return = bms_SPI.SPI_commands(6, RD_NXT_MSG, NULL_XX, NULL_XX, NULL_XX, NULL_XX, NULL_XX);
   PEC_check_status = pec.PEC_Check(1, 5, SPI_return);  // Checks the calculated and hardware returned PEC
@@ -94,14 +94,14 @@ bool Maxim852Device::enable_measurement() {
 
   // // balancing - broken, causes all ADC reads to fail
   // reg_val = 5;
-  // if (!spi_transaction( ADDR_BALEXP1, lowByte(reg_val), highByte(reg_val))) { return false; }
+  // spi_write(ADDR_BALEXP1, reg_val);
   // delay(1);
 
-  //   short cb_mode = (7 << 11);                                                                 // Auto cell balacing by minute
-  //   short cb_duty = ((0xe & 0xf) << 4);                                                        // 50% duty cycle
-  //   short cb_tempen = (1 << 2);                                                                // Cell Balancing Halts in Response to ALRTTEMP
-  //   reg_val = cb_mode | cb_duty | cb_tempen | 3;                                               // 3 = Embedded ADC/CAL Measurements Enabled, CBUVTHR Checking Enabled
-  //   spi_transaction( ADDR_BALCTRL, lowByte(reg_val), highByte(reg_val));
+  short cb_mode = (7 << 11);                    // Auto cell balacing by minute
+  short cb_duty = ((0xe & 0xf) << 4);           // 50% duty cycle
+  short cb_tempen = (1 << 2);                   // Cell Balancing Halts in Response to ALRTTEMP
+  reg_val = cb_mode | cb_duty | cb_tempen | 3;  // 3 = Embedded ADC/CAL Measurements Enabled, CBUVTHR Checking Enabled
+  spi_write(ALL, ADDR_WATCHDOG, reg_val);
 
   return true;
 }
@@ -126,7 +126,7 @@ bool Maxim852Device::single_scan() {
       // Serial.println("Scan Ok");
       return true;
     }
-    Serial.printf("Scan waiting on %d modules (t:%d)\n", (data->num_modules - modules_ready), counter * 10);
+    Serial.printf("Scan waiting on %d modules (t:%d)\n\r", (data->num_modules - modules_ready), counter * 10);
     counter++;
   }
   Serial.println("Scan failed");
@@ -246,7 +246,7 @@ void Maxim852Device::cell_V() {
       }
       if (cell_mv < config.min_cell_millivolts) {
         data->errors[module] |= ERROR_CELL_VOLT_LOW;
-        Serial.printf("Error: Module %d (ptr:%d) Cell %d Cell Voltage Low, Measured: %d mV, Limit: %d mV\n", int(module), int(cell_pointer), int(cell_pointer - ADDR_CELL1REG), cell_mv, config.min_cell_millivolts);
+        Serial.printf("Error: Module %d (ptr:%d) Cell %d Cell Voltage Low, Measured: %d mV, Limit: %d mV\n\r", int(module), int(cell_pointer), int(cell_pointer - ADDR_CELL1REG), cell_mv, config.min_cell_millivolts);
         for (int i = 0; i < (5 + (2 * config.cells_per_slave)); i++) {
           Serial.printf(" %x,", SPI_return[i]);
         }
@@ -255,7 +255,7 @@ void Maxim852Device::cell_V() {
       }
       if (cell_mv > config.panic_max_cell_millivolts) {
         data->errors[module] |= ERROR_CELL_VOLT_HIGH;
-        Serial.printf("Error: Module %d Cell %d Cell Voltage High, Measured: %d mV, Limit: %d mV\n", int(module), int(cell_pointer - ADDR_CELL1REG), cell_mv, config.panic_max_cell_millivolts);
+        Serial.printf("Error: Module %d Cell %d Cell Voltage High, Measured: %d mV, Limit: %d mV\n\r", int(module), int(cell_pointer - ADDR_CELL1REG), cell_mv, config.panic_max_cell_millivolts);
       }
     }
     // }
@@ -291,7 +291,7 @@ void Maxim852Device::cell_V() {
 //       }
 //       if (cell_mv < config.min_cell_millivolts) {
 //         data->errors[module] |= ERROR_CELL_VOLT_LOW;
-//         Serial.printf("Error: Module %d Cell %d Cell Voltage Low, Measured: %d mV, Limit: %d mV\n", int(module), int(cell_pointer - ADDR_CELL1REG), cell_mv, config.min_cell_millivolts);
+//         Serial.printf("Error: Module %d Cell %d Cell Voltage Low, Measured: %d mV, Limit: %d mV\n\r", int(module), int(cell_pointer - ADDR_CELL1REG), cell_mv, config.min_cell_millivolts);
 //         for (int i = 0; i < (5+(2*config.cells_per_slave)); i++) {
 //           Serial.printf(" %x,", SPI_return[i]);
 //         }
@@ -300,7 +300,7 @@ void Maxim852Device::cell_V() {
 //       }
 //       if (cell_mv > config.panic_max_cell_millivolts) {
 //         data->errors[module] |= ERROR_CELL_VOLT_HIGH;
-//         Serial.printf("Error: Module %d Cell %d Cell Voltage High, Measured: %d mV, Limit: %d mV\n", int(module), int(cell_pointer - ADDR_CELL1REG), cell_mv, config.panic_max_cell_millivolts);
+//         Serial.printf("Error: Module %d Cell %d Cell Voltage High, Measured: %d mV, Limit: %d mV\n\r", int(module), int(cell_pointer - ADDR_CELL1REG), cell_mv, config.panic_max_cell_millivolts);
 //       }
 //       module++;
 //     }
@@ -316,12 +316,12 @@ void Maxim852Device::block_V() {
     data->pack_volts += block_voltage;
 
     if (block_voltage > max_slave_voltage()) {
-      Serial.printf("Error: Module %d Voltage High, Measured: %d mV, Limit: %d mV\n", int(module), block_voltage, max_slave_voltage());
+      Serial.printf("Error: Module %d Block Voltage High, Measured: %d mV, Limit: %d mV\n\r", int(module), block_voltage, max_slave_voltage());
       data->errors[module] |= ERROR_SLAVE_VOLT_HIGH;
     }
     if (block_voltage < min_slave_voltage()) {
       data->errors[module] |= ERROR_SLAVE_VOLT_LOW;
-      Serial.printf("Error: Module %d Voltage Low, Measured: %d mV, Limit: %d mV\n", int(module), block_voltage, min_slave_voltage());
+      Serial.printf("Error: Module %d Block Voltage Low, Measured: %d mV, Limit: %d mV\n\r", int(module), block_voltage, min_slave_voltage());
     }
   }
 }
@@ -338,13 +338,13 @@ void Maxim852Device::block_V() {
 //     data->pack_volts += block_voltage;
 
 //     if (block_voltage > max_slave_voltage()) {
-//       Serial.printf("Error: Module %d Voltage High, Measured: %d mV, Limit: %d mV\n", int(module), block_voltage, max_slave_voltage());
+//       Serial.printf("Error: Module %d Voltage High, Measured: %d mV, Limit: %d mV\n\r", int(module), block_voltage, max_slave_voltage());
 //       data->errors[module] |= ERROR_SLAVE_VOLT_HIGH;
 
 //     }
 //     if (block_voltage < min_slave_voltage()) {
 //       data->errors[module] |= ERROR_SLAVE_VOLT_LOW;
-//       Serial.printf("Error: Module %d Voltage Low, Measured: %d mV, Limit: %d mV\n", int(module), block_voltage, min_slave_voltage());
+//       Serial.printf("Error: Module %d Voltage Low, Measured: %d mV, Limit: %d mV\n\r", int(module), block_voltage, min_slave_voltage());
 //     }
 //     module++;
 //   }
@@ -393,7 +393,7 @@ void Maxim852Device::calculate_soc() {
 
 
 void Maxim852Device::do_balance() {
-  return;
+  // return;
   SPI_return = spi_read(ALL, ADDR_BALCTRL);
   short raw = SPI_return[2] | (short)SPI_return[3] << 8;
   char cbactive = ((raw & 0xc000) >> 14);
@@ -401,10 +401,12 @@ void Maxim852Device::do_balance() {
   switch (cbactive) {
     case 0:
     case 2:
-      if (data->cell_mv_min > config.balance_mv_threshold) { auto_balance(); }
+      if (cell_balance_conditions(data->cell_mv_min, data->cell_mv_max)) { auto_balance(); }
       break;
     case 1:
       // Serial.println("Cell-Balancing Operations are Active");
+      read_balance();
+      // debug_balance();
       break;
     case 3:
       Serial.println("Cell Balancing Halted Unexpectedly due to Thermal Exit (ALRTCBTEMP), Time Out (ALRTCBTIMEOUT), or Calibration Fault (ALRTCBCAL) Conditions ");
@@ -415,24 +417,23 @@ void Maxim852Device::do_balance() {
   }
 }
 void Maxim852Device::read_balance() {
-  SPI_return = spi_read(ALL, ADDR_BALSWCTRL);
-  for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
-    for (int i = 0; i < data->num_modules; i++) {
-      if (i % 3 == 0) {
-        Serial.println();
+  data->num_bal_cells = 0;
+
+  for (int module = 0; module < 12; module++) {
+    SPI_return = spi_read(module, ADDR_BALSWEN);
+    short shunts = SPI_return[2] | (short)SPI_return[2 + 1] << 8;
+    data->balance_bits[module] = shunts;
+    for (int cell = 0; cell < config.cells_per_slave; cell++) {
+      if ((shunts >> cell & 1) == 1) {
+        data->num_bal_cells++;
       }
-      // SPI_return = spi_read(i, ADDR_BALUVSTAT);  // auto mode
-      short shunts = SPI_return[idx] | (short)SPI_return[idx + 1] << 8;
-      Serial.printf("# %d -> ", i);
-      print_shunts(shunts);
     }
   }
-  Serial.println();
 }
 
 void Maxim852Device::debug_balance() {
   SPI_return = spi_read(ALL, ADDR_BALCTRL);
-  short raw = SPI_return[3] | (short)SPI_return[4] << 8;
+  short raw = SPI_return[2] | (short)SPI_return[3] << 8;
   char cbactive = ((raw & 0xc000) >> 14);
 
   switch (cbactive) {
@@ -489,71 +490,76 @@ void Maxim852Device::debug_balance() {
   Serial.print("Duty cycle ");
   switch (cbduty) {
     case 0:
-      printf("6.25%% (default)\n");
+      printf("6.25%% (default)\n\r");
       break;
     case 1:
-      Serial.printf("12.5%%\n");
+      Serial.printf("12.5%%\n\r");
       break;
     case 2:
-      Serial.printf("18.75%%\n");
+      Serial.printf("18.75%%\n\r");
       break;
     case 3:
-      Serial.printf("25%%\n");
+      Serial.printf("25%%\n\r");
       break;
     case 4:
-      Serial.printf("31.25%%\n");
+      Serial.printf("31.25%%\n\r");
       break;
     case 5:
-      Serial.printf("37.5%%\n");
+      Serial.printf("37.5%%\n\r");
       break;
     case 6:
-      Serial.printf("43.75%%\n");
+      Serial.printf("43.75%%\n\r");
       break;
     case 7:
-      Serial.printf("50%%\n");
+      Serial.printf("50%%\n\r");
       break;
     case 8:
-      Serial.printf("56.25%%\n");
+      Serial.printf("56.25%%\n\r");
       break;
     case 9:
-      Serial.printf("62.5%%\n");
+      Serial.printf("62.5%%\n\r");
       break;
     case 10:
-      Serial.printf("68.75%%\n");
+      Serial.printf("68.75%%\n\r");
       break;
     case 11:
-      Serial.printf("75%%\n");
+      Serial.printf("75%%\n\r");
       break;
     case 12:
-      Serial.printf("81.25%%\n");
+      Serial.printf("81.25%%\n\r");
       break;
     case 13:
-      Serial.printf("87.5%%\n");
+      Serial.printf("87.5%%\n\r");
       break;
     case 14:
-      Serial.printf("93.75%%\n");
+      Serial.printf("93.75%%\n\r");
       break;
     case 15:
-      Serial.printf("100%%, less NOL and measurement/calibration overhead\n");
+      Serial.printf("100%%, less NOL and measurement/calibration overhead\n\r");
       break;
     default:
-      Serial.printf("Unknown\n");
+      Serial.printf("Unknown\n\r");
       break;
   }
   char cbmeasuren = (raw & 0x3);
-  Serial.printf("CBMEASEN %d\n", cbmeasuren);
+  Serial.printf("CBMEASEN %d\n\r", cbmeasuren);
 
   SPI_return = spi_read(ALL, ADDR_BALSTAT);
-  raw = SPI_return[3] | (short)SPI_return[4] << 8;
-  Serial.printf("CBTIMER %d \n", (raw & 0x3ff));
-  Serial.printf("CBCNTR %d \n", ((raw & 0xc00) >> 10));
-  Serial.printf("CBUNIT %d \n", ((raw & 0x3000) >> 12));
+  raw = SPI_return[2] | (short)SPI_return[3] << 8;
+  Serial.printf("CBTIMER %d \n\r", (raw & 0x3ff));
+  Serial.printf("CBCNTR %d \n\r", ((raw & 0xc00) >> 10));
+  Serial.printf("CBUNIT %d \n\r", ((raw & 0x3000) >> 12));
 
   SPI_return = spi_read(ALL, ADDR_BALAUTOUVTHR);
-  raw = SPI_return[3] | (short)SPI_return[4] << 8;
-  Serial.printf("CBUVMINCELL %d \n", (raw & 0x1));
-  Serial.printf("CBUVTHR %d \n", ((raw & 0xfffe) >> 2));
-  Serial.printf("CBUVTHR %d  ?? Last\n", min_cell_adc_raw);
+  raw = SPI_return[2] | (short)SPI_return[3] << 8;
+  Serial.printf("CBUVMINCELL %d \n\r", (raw & 0x1));
+  Serial.printf("CBUVTHR %d \n\r", ((raw & 0xfffe) >> 2));
+  Serial.printf("CBUVTHR %d  ?? Last\n\r", min_cell_adc_raw);
+
+  SPI_return = spi_read(ALL, ADDR_STATUS3);
+  raw = SPI_return[2] | (short)SPI_return[3] << 8;
+  Serial.printf("ADDR_STATUS3 %d  \n\r", raw);
+
 }
 void Maxim852Device::auto_balance() {
 

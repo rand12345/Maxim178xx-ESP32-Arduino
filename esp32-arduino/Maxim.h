@@ -61,6 +61,7 @@ public:
   }
 
   void display_error();
+  void print_balance_bits();
   BMS_Data read_pack();
 
   static Maxim *build();
@@ -100,7 +101,7 @@ protected:
       for (char i = 0; i < read_num; i++) {
         Serial.printf("%x, ", SPI_return[i]);
       }
-        Serial.printf("\n");
+        Serial.printf("\n\r");
     }  // Checks the calculated and hardware returned PEC
     bms_SPI.SPI_commands(2, READ_RX_INTERRUPT_FLAGS, 0x00);
     bms_SPI.SPI_commands(2, READ_RX_STATUS, 0x00);
@@ -130,7 +131,7 @@ protected:
       for (char i = 0; i < 8; i++) {
         Serial.printf("%x, ", SPI_return[i]);
       }
-        Serial.printf("\n");
+        Serial.printf("\n\r");
     }
     // PEC_check_status = pec.PEC_Check(1, 5, SPI_return);  // Checks the calculated and hardware returned PEC
     bms_SPI.SPI_commands(2, READ_RX_INTERRUPT_FLAGS, NULL_XX);
@@ -148,7 +149,7 @@ private:
     SPI_return = spi_read(ALL, 0x0);
     short model = ((SPI_return[2] | short(SPI_return[3] << 8)) >> 4) & 0xfff;
     // Logic to determine the device model based on register 0x0
-    Serial.printf("Found model %x\n", model);
+    Serial.printf("Found model %x\n\r", model);
     if (model == 0x854) {
       return Maxim852;
     } else {

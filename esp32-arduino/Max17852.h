@@ -61,6 +61,10 @@ const float BETA = 3400.0;  // Material constant β
 #define ADDR_ALRTBALSWREG 0x12
 #define ADDR_SWACTION 0x13
 
+// Balancing
+#define ADDR_WATCHDOG 0x18
+#define ADDR_BALSWEN 0x1A
+
 //General configuration registers
 #define ADDR_DEVCFG1 0x14
 #define ADDR_DEVCFG2 0x15
