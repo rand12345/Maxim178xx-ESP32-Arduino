@@ -88,20 +88,9 @@ bool Maxim852Device::enable_measurement() {
   spi_write(ALL, ADDR_DIAGCFG, reg_val);
   delay(1);
 
-  // reg_val = 0;  // set DIAGSEL die adc measurements
-  // spi_write(ALL, ADDR_DEVCFG1, reg_val);
-  // delay(1);
-
-  // // balancing - broken, causes all ADC reads to fail
-  // reg_val = 5;
-  // spi_write(ADDR_BALEXP1, reg_val);
-  // delay(1);
-
-  short cb_mode = (7 << 11);                    // Auto cell balacing by minute
-  short cb_duty = ((0xe & 0xf) << 4);           // 50% duty cycle
-  short cb_tempen = (1 << 2);                   // Cell Balancing Halts in Response to ALRTTEMP
-  reg_val = cb_mode | cb_duty | cb_tempen | 3;  // 3 = Embedded ADC/CAL Measurements Enabled, CBUVTHR Checking Enabled
-  spi_write(ALL, ADDR_WATCHDOG, reg_val);
+  reg_val = 0x1000 | 0x40 | 0x4;  // bal manual seconds | 50% duty | exit on die temp
+  spi_write(ALL, ADDR_BALSWCTRL, reg_val);
+  delay(1);
 
   return true;
 }
@@ -111,47 +100,25 @@ bool Maxim852Device::single_scan() {
   for (int module = 0; module < config.num_modules; module++) {
     spi_write(module, ADDR_SCANCTRL, reg_val);
   }
+
+  unsigned short raw = 0;
   int counter = 0;
   while (counter <= 20) {
+    int success = 0;
     vTaskDelay(pdMS_TO_TICKS(10));
-    char modules_ready = 0;
     for (int module = 0; module < config.num_modules; module++) {
       SPI_return = spi_read(module, ADDR_SCANCTRL);
-      unsigned short raw = (SPI_return[2]) + (SPI_return[2 + 1] << 8);
+      raw = (SPI_return[2]) + (SPI_return[2 + 1] << 8);
       if ((raw & 0x8000) && (raw & 0x2000)) {
-        modules_ready++;
+        success++;
       }
     }
-    if (modules_ready == data->num_modules) {
-      // Serial.println("Scan Ok");
-      return true;
-    }
-    Serial.printf("Scan waiting on %d modules (t:%d)\n\r", (data->num_modules - modules_ready), counter * 10);
+    if (success == config.num_modules) { return true; }
     counter++;
   }
   Serial.println("Scan failed");
   return false;
 }
-// bool Maxim852Device::single_scan() {
-//   short reg_val = 0x1031;  //
-//   spi_write(ALL, ADDR_SCANCTRL, reg_val);
-//   int counter = 0;
-//   while (counter <= 20) {
-//     vTaskDelay(pdMS_TO_TICKS(20));
-//     SPI_return = spi_read(ALL, ADDR_SCANCTRL);
-//     char modules = 0;
-//     for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
-//       unsigned short raw = (SPI_return[idx]) + (SPI_return[idx + 1] << 8);
-//       Serial.printf(" R: %x ", raw);
-//       if ((raw & 0x8000) && (raw & 0x2000)) { return true; };
-//       if ((raw & 0x8000) && (raw & 0x2000)) { modules++; };
-//     }
-//     Serial.println();
-//     if (modules == data->num_modules) { return true; }
-//     counter++;
-//   }
-//   return false;
-// }
 
 void Maxim852Device::read_die_temp() {
   for (int module = 0; module < config.num_modules; module++) {
@@ -226,7 +193,8 @@ void Maxim852Device::cell_V() {
       // important, reset min cell reference for balancing LV ADV val at begining of sampling of first slave
       // +10mv = +33 adc
       if ((0 == module) && (cell_pointer == ADDR_CELL1REG)) {
-        min_cell_adc_raw = raw + (short)(config.balance_mv_hys * 3.3);
+        min_cell_adc_raw = raw;
+        // min_cell_adc_raw = raw + (short)(config.balance_mv_hys * 3.3);
       } else {
         if (min_cell_adc_raw > raw) {
           min_cell_adc_raw = raw;
@@ -391,45 +359,102 @@ void Maxim852Device::calculate_soc() {
   return;
 }
 
+void Maxim852Device::calc_balance_bits(char module) {
+  // 2. Host determines which cells to balance and associated balancing time.
+  data->balance_bits[module] = 0;  // Clear all balance status
+  bits_remainder[module] = 0;      // clear all
 
-void Maxim852Device::do_balance() {
-  // return;
-  SPI_return = spi_read(ALL, ADDR_BALCTRL);
-  short raw = SPI_return[2] | (short)SPI_return[3] << 8;
-  char cbactive = ((raw & 0xc000) >> 14);
-
-  switch (cbactive) {
-    case 0:
-    case 2:
-      if (cell_balance_conditions(data->cell_mv_min, data->cell_mv_max)) { auto_balance(); }
-      break;
-    case 1:
-      // Serial.println("Cell-Balancing Operations are Active");
-      read_balance();
-      // debug_balance();
-      break;
-    case 3:
-      Serial.println("Cell Balancing Halted Unexpectedly due to Thermal Exit (ALRTCBTEMP), Time Out (ALRTCBTIMEOUT), or Calibration Fault (ALRTCBCAL) Conditions ");
-      debug_balance();
-      break;
-    default:
-      break;
-  }
-}
-void Maxim852Device::read_balance() {
-  data->num_bal_cells = 0;
-
-  for (int module = 0; module < 12; module++) {
-    SPI_return = spi_read(module, ADDR_BALSWEN);
-    short shunts = SPI_return[2] | (short)SPI_return[2 + 1] << 8;
-    data->balance_bits[module] = shunts;
-    for (int cell = 0; cell < config.cells_per_slave; cell++) {
-      if ((shunts >> cell & 1) == 1) {
-        data->num_bal_cells++;
-      }
+  for (char cell = 0; cell < config.cells_per_slave; cell++) {
+    char index = module * config.cells_per_slave + cell;
+    short cell_mv = data->cell_millivolts[index];
+    if (cell_balance_conditions(data->cell_mv_min, cell_mv)) {
+      // If this cell is within the hysteresis of the lowest cell and above the minimum balance voltage threshold then mark it for balancing.
+      data->balance_bits[module] |= 1 << cell;
+      data->num_bal_cells++;
     }
   }
 }
+
+void Maxim852Device::do_balance() {
+for (int balance_counter = 0; balance_counter < 3; balance_counter++) {
+    if (balance_counter == 2) {
+      SPI_return = spi_read(ALL, ADDR_BALSTAT);
+      unsigned short raw = SPI_return[2] | (short)SPI_return[3] << 8;
+      char cbtimer = ((raw & 0xF00) >> 8);
+      if ((cbtimer < 3) && (data->cell_mv_min > config.balance_mv_threshold)) {
+        spi_write(ALL, ADDR_BALEXP1, 60);  // Bal watchdog reset
+        // spi_write(ALL, ADDR_BALSWCTRL, 60);  // Bal watchdog reset
+      }
+      spi_write(ALL, ADDR_BALSWCTRL, 0x8000);  // turn off shunts for voltage measurement and reset wdt
+      return;
+    }
+    unsigned short bits = 0;
+    // Counter is cyclical over 1 second and is generated in the main lool (0->3). Each step represents 250ms.
+    if (data->cell_mv_max < config.balance_mv_threshold) {  // Whole pack
+      Serial.printf("Balancing off - Cells under threshold %dvM", config.balance_mv_threshold);
+      for (char module = 0; module < data->num_modules; module++) {
+        data->balance_bits[module] = 0;  // Clear all balance status
+        bits_remainder[module] = 0;      // clear all
+      }
+      spi_write(ALL, ADDR_BALSWCTRL, OFF);
+      return;
+    }
+
+    for (char module = 0; module < data->num_modules; module++) {
+      if (balance_counter == 0) {
+        calc_balance_bits(module);
+      }
+      if (data->die_temp[module] > 100) {  // Check module die overtemp
+        Serial.printf("SHUNT OVERTEMP! IC temp: %dºC  Switching off module %d shunts | ", data->die_temp[module], module + 1);
+        data->balance_bits[module] = 0;  // Clear all balance status
+        bits_remainder[module] = 0;      // clear all
+      }
+      bits = toggle_adjacent_bits(data->balance_bits[module], &bits_remainder[module]);
+      spi_write(module, ADDR_BALSWCTRL, bits);
+    }
+    vTaskDelay(pdMS_TO_TICKS(config.shunt_on_time_ms));
+  }
+}
+// void Maxim852Device::do_balance() {
+//   return;
+//   SPI_return = spi_read(ALL, ADDR_BALCTRL);
+//   short raw = SPI_return[2] | (short)SPI_return[3] << 8;
+//   char cbactive = ((raw & 0xc000) >> 14);
+
+//   switch (cbactive) {
+//     case 0:
+//     case 2:
+//       Serial.println("Cell-Balancing restarting");
+//       single_scan();
+//       debug_balance();
+//       if (cell_balance_conditions(data->cell_mv_min, data->cell_mv_max)) { auto_balance(); }
+//       break;
+//     case 1:
+//       // Serial.println("Cell-Balancing operations are active");
+//       read_balance();
+//       break;
+//     case 3:
+//       Serial.println("Cell Balancing Halted Unexpectedly due to Thermal Exit (ALRTCBTEMP), Time Out (ALRTCBTIMEOUT), or Calibration Fault (ALRTCBCAL) Conditions ");
+//       debug_balance();
+//       break;
+//     default:
+//       break;
+//   }
+// }
+// void Maxim852Device::read_balance() {
+//   data->num_bal_cells = 0;
+
+//   for (int module = 0; module < config.num_modules; module++) {
+//     SPI_return = spi_read(module, ADDR_BALSWCTRL);
+//     short shunts = SPI_return[2] | (short)SPI_return[2 + 1] << 8;
+//     data->balance_bits[module] = shunts;
+//     for (int cell = 0; cell < config.cells_per_slave; cell++) {
+//       if ((shunts >> cell & 1) == 1) {
+//         data->num_bal_cells++;
+//       }
+//     }
+//   }
+// }
 
 void Maxim852Device::debug_balance() {
   SPI_return = spi_read(ALL, ADDR_BALCTRL);
@@ -552,14 +577,12 @@ void Maxim852Device::debug_balance() {
 
   SPI_return = spi_read(ALL, ADDR_BALAUTOUVTHR);
   raw = SPI_return[2] | (short)SPI_return[3] << 8;
-  Serial.printf("CBUVMINCELL %d \n\r", (raw & 0x1));
-  Serial.printf("CBUVTHR %d \n\r", ((raw & 0xfffe) >> 2));
-  Serial.printf("CBUVTHR %d  ?? Last\n\r", min_cell_adc_raw);
+  Serial.printf("CBUVTHR %d stored in bms \n\r", ((raw & 0xfffe) >> 2));
+  Serial.printf("CBUVTHR %d from cell readings \n\r", min_cell_adc_raw);
 
   SPI_return = spi_read(ALL, ADDR_STATUS3);
   raw = SPI_return[2] | (short)SPI_return[3] << 8;
   Serial.printf("ADDR_STATUS3 %d  \n\r", raw);
-
 }
 void Maxim852Device::auto_balance() {
 
@@ -602,4 +625,30 @@ float calculateTemperature(uint16_t value) {
 
   // Convert Kelvin to Celsius
   return temp_kelvin - 273.15;
+}
+
+inline short toggle_adjacent_bits(const short bits, short *bits_remainder) {
+  short result = 0;
+  short input = bits;        // mutable copy
+  input ^= *bits_remainder;  // use *bits_remainder to get the value
+  *bits_remainder = 0;       // reset the value pointed to by bits_remainder
+
+  for (int i = 1; i < 16; i++) {
+    int first = ((input >> (i - 1)) & 1) == 1;
+    int second = ((input >> i) & 1) == 1;
+
+    if (first && second) {
+      result |= 1 << (i - 1);           // keep first
+      input ^= 1 << i;                  // drop second
+      *bits_remainder |= 1 << (i - 1);  // update mask
+    } else {
+      if (first) {
+        result |= 1 << (i - 1);
+      }
+      if (second) {
+        result |= 1 << i;
+      }
+    }
+  }
+  return result;
 }

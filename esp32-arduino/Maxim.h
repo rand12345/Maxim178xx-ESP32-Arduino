@@ -67,6 +67,10 @@ public:
   static Maxim *build();
 protected:
   BMS_Data *data;
+  unsigned short min_cell_adc_raw = 0x3fff;  // Automatic balancing algo, lowest of all slaves
+  short bits_remainder[32];                  // Manual balancing algo: for keeping track of alternating bit pattern
+  char balance_counter = 0;
+
   void init_values();
   void validate_cell_delta();
   virtual bool clear_status_fmea() = 0;
@@ -101,7 +105,7 @@ protected:
       for (char i = 0; i < read_num; i++) {
         Serial.printf("%x, ", SPI_return[i]);
       }
-        Serial.printf("\n\r");
+      Serial.printf("\n\r");
     }  // Checks the calculated and hardware returned PEC
     bms_SPI.SPI_commands(2, READ_RX_INTERRUPT_FLAGS, 0x00);
     bms_SPI.SPI_commands(2, READ_RX_STATUS, 0x00);
@@ -131,7 +135,7 @@ protected:
       for (char i = 0; i < 8; i++) {
         Serial.printf("%x, ", SPI_return[i]);
       }
-        Serial.printf("\n\r");
+      Serial.printf("\n\r");
     }
     // PEC_check_status = pec.PEC_Check(1, 5, SPI_return);  // Checks the calculated and hardware returned PEC
     bms_SPI.SPI_commands(2, READ_RX_INTERRUPT_FLAGS, NULL_XX);
@@ -188,15 +192,13 @@ private:
   void read_balance();
   void debug_balance();
   void auto_balance();
+  void calc_balance_bits(char module);
 };
 
 // ============ Maxim823Device class ============
 
 class Maxim823Device : public Maxim {
-protected:
-  unsigned short min_cell_adc_raw = 0x3fff;  // Automatic balancing algo, lowest of all slaves
-  short bits_remainder[32];                  // Manual balancing algo: for keeping track of alternating bit pattern
-  char balance_counter = 0;
+
 public:
   Maxim823Device()
     : Maxim() {

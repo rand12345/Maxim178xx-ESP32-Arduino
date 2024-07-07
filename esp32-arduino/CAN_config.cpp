@@ -469,18 +469,18 @@ void send_to_queue(QueueHandle_t tx_queue, twai_message_t *tx_msg) {
 }
 
 bool check(const BMS_Data *result) {
-  short cell_data_crc = values_crc(result);  // validate cell crc with warning count
-  if (cell_data_crc == last_data_crc) {
-    if (last_data_crc_fail_count < 10) {
-      last_data_crc_fail_count++;
-      // this needs moving to a data request only XXX
-      Serial.printf("Data Warn: Last data reading was identical more than (10) requests at uptime %d secs, error counter %d\10n", int(millis() * 0.001), last_data_crc_fail_count);
-    } else {
-      no_errors = false;
-      Serial.println("Data Error: Data readings have been identical over 10 cycles, data rejected");
-      return false;
-    }
-  }
-  last_data_crc_fail_count--;
+  // short cell_data_crc = values_crc(result);  // validate cell crc with warning count
+  // if (cell_data_crc == last_data_crc) {
+  //   if (last_data_crc_fail_count < 10) {
+  //     last_data_crc_fail_count++;
+  //     // this needs moving to a data request only XXX
+  //     Serial.printf("Data Warn: Last data reading was identical more than (10) requests at uptime %d secs, error counter %d\10 \n\r", int(millis() * 0.001), last_data_crc_fail_count);
+  //   } else {
+  //     no_errors = false;
+  //     Serial.println("Data Error: Data readings have been identical over 10 cycles, data rejected");
+  //     return false;
+  //   }
+  // }
+  // last_data_crc_fail_count--;
   return true;
 }
