@@ -391,7 +391,7 @@ for (int balance_counter = 0; balance_counter < 3; balance_counter++) {
     unsigned short bits = 0;
     // Counter is cyclical over 1 second and is generated in the main lool (0->3). Each step represents 250ms.
     if (data->cell_mv_max < config.balance_mv_threshold) {  // Whole pack
-      Serial.printf("Balancing off - Cells under threshold %dvM", config.balance_mv_threshold);
+      // Serial.printf("Balancing off - Cells under threshold %dvM", config.balance_mv_threshold);
       for (char module = 0; module < data->num_modules; module++) {
         data->balance_bits[module] = 0;  // Clear all balance status
         bits_remainder[module] = 0;      // clear all

@@ -46,6 +46,7 @@ typedef struct
   uint16_t balance_bits[MAX_SLAVES];    // Array to hold all cells to be balanced
 } BMS_Data;
 
+extern BMS_Data maxim_data, inverter_data;
 
 // ============ Base class ============
 

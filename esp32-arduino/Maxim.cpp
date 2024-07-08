@@ -1,5 +1,8 @@
 #include "Maxim.h"
 
+BMS_Data inverter_data;
+BMS_Data maxim_data;
+
 Maxim *Maxim::build() {
   DeviceModel model = detect_device();
   if (model == Maxim852) {

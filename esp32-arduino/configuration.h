@@ -6,20 +6,9 @@
 #include "soc/gpio_sig_map.h"
 #include <EEPROM.h>
 
-// enables wifi and mqtt
+// enables wifi and mqtt - requires secrets.h/cpp
 
 #define WIFI
-/* 
-
-secrets.h file
-
-const char* SSID = "Acesss Point Name";
-const char* PASS = "Password";
-const char* MQTT_SERVER  = "mqtt://IP:PORT";
-const char* MQTT_USERNAME = "";
-const char* MQTT_PASSWORD = "";
-const char* MQTT_TOPIC = "";
-*/
 
 // Factory settings - can be edited altered in EEPROM menu
 

@@ -8,8 +8,8 @@
         Slave temperatures   ✅
         Long reads           ✅ (x823)
         Combine devices      ✅
-        WiFi                 ❌
-        MQTT                 ❌
+        WiFi                 ✅
+        MQTT                 ✅
 
 */
 
@@ -18,70 +18,37 @@
 #include "driver/twai.h"
 #include <freertos/task.h>
 
-#ifdef WIFI
-#include "ESP32MQTTClient.h"
-#include <WiFi.h>
-#include "secrets.h"
-#include <ArduinoJson.h>
-ESP32MQTTClient mqttClient;  // all params are set later
-#endif
-
-
 void setup() {
   Serial.begin(BAUDRATE);
-// Wifi
-#ifdef WIFI
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(SSID, PASS);
-  Serial.println("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println(WiFi.status());
-  }
-  Serial.println(WiFi.localIP());
-
-  mqttClient.setURI(MQTT_SERVER, MQTT_USERNAME, MQTT_PASSWORD);
-
-  char mqttClientName[50];
-  uint64_t chipid = ESP.getEfuseMac();  // The chip ID is essentially the MAC address
-  snprintf(mqttClientName, 50, "MAXIM-%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
-  mqttClient.setMqttClientName(mqttClientName);
-
-  mqttClient.enableLastWillMessage("lwt", "Maxim going offline");
-  mqttClient.setKeepAlive(30);
-  mqttClient.loopStart();
-
   initializeEEPROM();
+#ifdef WIFI
+  xTaskCreatePinnedToCore(WiFi_init, "WIFI_Task", 8192, NULL, 1, &wifiTaskHandle, 0);
+#endif
   // Contactors off
   digitalWrite(PRECHARGE_PIN, 0);
   digitalWrite(MAIN_CONTACTOR_PIN, 0);
   initialisation.Arduino_SPI_init();
-#endif
   delay(500);
+  print_config();
 
   initialisation.MAX178X_init_sequence();
-
   xTaskCreatePinnedToCore(SPI_Task, "SPI_Task", 8192, NULL, 1, &spiTaskHandle, 0);
-
-  vTaskDelay(pdMS_TO_TICKS(2000));
   Serial.println("Waiting for good battery data");
 
-  while (1) {
+  for (;;) {
     if (!has_errors(&inverter_data)) {
       break;
     }
     vTaskDelay(pdMS_TO_TICKS(1000));
   };
+
   Serial.println("Data for inverter OK - Starting CAN");
-
-  print_config();
-
-  // CAN Frame queues
   rx_queue = xQueueCreate(100, sizeof(twai_message_t));
-  tx_queue = xQueueCreate(100, sizeof(twai_message_t));
+  tx_queue = xQueueCreate(50, sizeof(twai_message_t));
   xTaskCreatePinnedToCore(TWAI_Task, "TWAI_Task", 4096, NULL, 6, &twaiTaskHandle, 0);
   xTaskCreatePinnedToCore(TWAI_Processing_Task, "TWAI_Processing_Task", 4096, NULL, 4, &twaiprocessTaskHandle, 0);
 
+  vTaskDelay(pdMS_TO_TICKS(5000));
   handle_keypress('?');  // display menu
 }
 
@@ -96,15 +63,13 @@ void loop() {
     char incomingByte = Serial.read();
     handle_keypress(incomingByte);
   }
-
-
 }  // App in threads only
+
 
 void TWAI_Processing_Task(void *pvParameters) {
   char contactor = 0;
   char status = 0;
   unsigned long summary_time = 0;
-  unsigned long mqtt_time = 0;
 
 #ifdef INVERTER_WATCHDOG
   esp_task_wdt_add(NULL);
@@ -167,14 +132,6 @@ void TWAI_Processing_Task(void *pvParameters) {
         Serial.printf("Contactors: Precharge: %d | Main: %d\n\n\r", contactor & 1, contactor > 1);
       }
       summary_time = millis();
-    }
-    if ((mqtt_time + 2000) < millis()) {
-#ifdef WIFI
-      char *jsonChar = BMSDataToJson(inverter_data);
-      mqttClient.publish(MQTT_TOPIC, jsonChar, 0, false);
-      free(jsonChar);
-#endif
-      mqtt_time = millis();
     }
   }
 }
@@ -380,6 +337,10 @@ void handle_keypress(char incomingByte) {
     vTaskDelete(twaiTaskHandle);
     vTaskDelay(pdMS_TO_TICKS(100));  // Give some time for the message to be sent
     vTaskDelete(twaiprocessTaskHandle);
+#ifdef WIFI
+    Serial.println("Killing wifi, mqtt...");
+    vTaskDelete(wifiTaskHandle);
+#endif
     Serial.println("Rebooting the ESP in 1 second...");
     digitalWrite(SHDNL_MAX17841_1, LOW);
     delay(1000);
@@ -389,6 +350,34 @@ void handle_keypress(char incomingByte) {
 
 
 #ifdef WIFI
+ESP32MQTTClient mqttClient;
+void WiFi_init(void *pvParameters) {
+  unsigned long mqtt_time = 0;
+  Serial.println("WiFi Task");
+  wifi_start();
+
+  // for (;;) {
+  mqttClient.setURI(MQTT_SERVER, MQTT_USERNAME, MQTT_PASSWORD);
+
+  char mqttClientName[50];
+  uint64_t chipid = ESP.getEfuseMac();  // The chip ID is essentially the MAC address
+  snprintf(mqttClientName, 50, "MAXIM-%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
+  mqttClient.setMqttClientName(mqttClientName);
+  mqttClient.enableLastWillMessage("lwt", "Maxim going offline");
+  mqttClient.setKeepAlive(30);
+  mqttClient.loopStart();
+  while (1) {
+    ArduinoOTA.handle();
+    vTaskDelay(pdMS_TO_TICKS(1000));  // low pri-task
+    if ((mqtt_time + 5000) > millis()) { continue; }
+    mqtt_time = millis();
+    char *jsonChar = BMSDataToJson(inverter_data);
+    mqttClient.publish(MQTT_TOPIC, jsonChar, 0, false);
+    free(jsonChar);
+  }
+  // }
+}
+
 void onMqttConnect(esp_mqtt_client_handle_t client) {
   if (mqttClient.isMyTurn(client))  // can be omitted if only one client
   {
@@ -403,25 +392,25 @@ void handleMQTT(void *handler_args, esp_event_base_t base, int32_t event_id, voi
 
 
 // Function to convert BMS_Data to JSON char pointer
-char *BMSDataToJson(BMS_Data &data) {
+char *BMSDataToJson(const BMS_Data &inverter_data) {
   // Create a JSON document
   JsonDocument doc;
-  doc["timestamp"] = data.timestamp;
+  doc["timestamp"] = inverter_data.timestamp;
 
   JsonArray errors = doc["errors"].to<JsonArray>();
-  for (int i = 0; i < data.num_modules + 1; i++) {
-    errors.add(data.errors[i]);
+  for (int i = 0; i < inverter_data.num_modules + 1; i++) {
+    errors.add(inverter_data.errors[i]);
   }
 
-  doc["num_modules"] = static_cast<int>(data.num_modules);
-  doc["num_bal_cells"] = static_cast<int>(data.num_bal_cells);
-  doc["milliamps"] = data.milliamps;
-  doc["cell_mv_min"] = data.cell_mv_min;
-  doc["cell_mv_max"] = data.cell_mv_max;
-  doc["cell_temp_min"] = data.cell_temp_min;
-  doc["cell_temp_max"] = data.cell_temp_max;
-  doc["pack_volts"] = data.pack_volts;
-  doc["soc"] = data.soc;
+  doc["num_modules"] = static_cast<int>(inverter_data.num_modules);
+  doc["num_bal_cells"] = static_cast<int>(inverter_data.num_bal_cells);
+  doc["milliamps"] = inverter_data.milliamps;
+  doc["cell_mv_min"] = inverter_data.cell_mv_min;
+  doc["cell_mv_max"] = inverter_data.cell_mv_max;
+  doc["cell_temp_min"] = inverter_data.cell_temp_min;
+  doc["cell_temp_max"] = inverter_data.cell_temp_max;
+  doc["pack_volts"] = inverter_data.pack_volts;
+  doc["soc"] = inverter_data.soc;
 
   // Convert JSON document to string
   String jsonString;
@@ -433,4 +422,5 @@ char *BMSDataToJson(BMS_Data &data) {
 
   return jsonCharArray;
 }
+
 #endif
