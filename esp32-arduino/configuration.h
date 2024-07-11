@@ -8,7 +8,7 @@
 
 // enables wifi and mqtt - requires secrets.h/cpp
 
-#define WIFI
+// #define WIFI
 
 // Factory settings - can be edited altered in EEPROM menu
 
