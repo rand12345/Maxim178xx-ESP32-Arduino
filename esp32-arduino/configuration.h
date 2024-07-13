@@ -47,6 +47,7 @@
 #define CAB300c 0x3c2
 #define SAMSUNG_SDI 0x10
 #define FOX 0x1871
+#define GW 0x4200 
 #define LV_INVERTER 0x305
 
 #define PRECHARGE_DWELL_TIME_MS 200  // time between activating precharge and main contactors

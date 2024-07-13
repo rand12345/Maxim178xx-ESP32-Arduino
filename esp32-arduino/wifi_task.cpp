@@ -1,6 +1,6 @@
 #ifndef WIFI_TASK_H
 #define WIFI_TASK_H
-
+#ifdef WIFI
 #include "wifi_task.h"
 
 void wifi_start() {
@@ -50,4 +50,5 @@ void wifi_start() {
 
 
 
+#endif
 #endif

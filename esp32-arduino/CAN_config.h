@@ -36,6 +36,9 @@ private:
   void CAB300(twai_message_t frame);
   void SAMSUNGSDI(twai_message_t frame);
   void BMS_ComLV(BMS_Data *result, QueueHandle_t tx_queue);
+  void BMS_ComHV_GW(BMS_Data *result, twai_message_t rxFrame, QueueHandle_t tx_queue);
+  void BMS_GWHV_Data(BMS_Data *result, QueueHandle_t tx_queue);
+  void BMS_GWHV_Info(BMS_Data *result, QueueHandle_t tx_queue);
   void BMS_ComHV(BMS_Data *result, twai_message_t rxFrame, QueueHandle_t tx_queue);
   void BMS_ComHV_Announce(BMS_Data *result, QueueHandle_t tx_queue);
   void BMS_ComHV_Pack_Data(BMS_Data *result, QueueHandle_t tx_queue);

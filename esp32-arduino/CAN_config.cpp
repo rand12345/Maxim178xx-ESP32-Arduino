@@ -63,6 +63,16 @@ char CanBus::canread(twai_message_t rxFrame, QueueHandle_t tx_queue, BMS_Data *l
       }
       BMS_ComHV(local_result, rxFrame, tx_queue);
       break;  // ignore other frames on this ID
+    case GW:
+      if (has_errors(local_result)) {
+        no_errors = false;
+        break;
+      }
+      if (!check(local_result)) {
+        return (inverter_sent | (no_errors << 1));
+      }
+      BMS_ComHV_GW(local_result, rxFrame, tx_queue);
+      break;
 
     case LV_INVERTER:
       if (has_errors(local_result)) {
@@ -431,6 +441,181 @@ void CanBus::BMS_ComHV_Data(BMS_Data *result, QueueHandle_t tx_queue)  // commun
   tx_msg.data[7] = 0;
   send_to_queue(tx_queue, &tx_msg);
 }
+
+void CanBus::BMS_ComHV_GW(BMS_Data *result, twai_message_t rxFrame, QueueHandle_t tx_queue) {
+  switch (rxFrame.data[0]) {
+    case 0:
+      BMS_GWHV_Data(result, tx_queue);
+      break;
+    default:
+      BMS_GWHV_Info(result, tx_queue);
+      break;
+  }
+}
+
+void CanBus::BMS_GWHV_Data(BMS_Data *result, QueueHandle_t tx_queue) {
+  // info https://github.com/stuartpittaway/diyBMSv4ESP32/blob/9a0a3ed26f2dc973d3faf3e2799a6688da3ab13e/ESPController/src/pylonforce_canbus.cpp
+  // src https://github.com/JoeMudr/JoeMBMC/tree/072d2beff6c75bfb339139ffc936c3f1b63cede1
+  
+  const char batteryID = 1;
+  if (print_readings) {
+    Serial.println("CAN SEND ================> Send HV GW Inverter Data");
+  }
+  twai_message_t tx_msg = { 0 };
+  tx_msg.extd = 1;
+  tx_msg.data_length_code = 8;
+
+  int current = (result->milliamps * 0.001) + 30000;
+  tx_msg.identifier = 0x4210 + batteryID;
+  tx_msg.data[0] = lowByte(short(result->pack_volts));
+  tx_msg.data[1] = highByte(short(result->pack_volts));
+  tx_msg.data[2] = lowByte(short(current));  // [ToDo] values > ~6500A will overflow!
+  tx_msg.data[3] = highByte(short(current));
+  tx_msg.data[4] = lowByte(short(result->cell_temp_max));
+  tx_msg.data[5] = highByte(short(result->cell_temp_max));
+  tx_msg.data[6] = char(result->soc);
+  tx_msg.data[7] = 100;  //soh
+  send_to_queue(tx_queue, &tx_msg);
+
+  int max_pack_v = max_pack_voltage_cutoff();
+  int min_pack_v = low_pack_voltage_cutoff();
+  int charge = max_charge(result) + 30000;
+  int discharge = max_discharge(result) + 30000;
+  tx_msg.identifier = 0x4220 + batteryID;
+  tx_msg.data[0] = lowByte(short(max_pack_v));  // max pack v
+  tx_msg.data[1] = highByte(short(max_pack_v));
+  tx_msg.data[2] = lowByte(short(min_pack_v));  // min pack v
+  tx_msg.data[3] = highByte(short(min_pack_v));
+  tx_msg.data[4] = lowByte(short(charge));
+  tx_msg.data[5] = highByte(short(charge));
+  tx_msg.data[6] = lowByte(short(discharge));
+  tx_msg.data[7] = highByte(short(discharge));
+  send_to_queue(tx_queue, &tx_msg);
+
+
+  tx_msg.identifier = 0x4230 + batteryID;
+  tx_msg.data[0] = lowByte(short(result->cell_mv_min));
+  tx_msg.data[1] = highByte(short(result->cell_mv_min));
+  tx_msg.data[2] = lowByte(short(result->cell_mv_max));
+  tx_msg.data[3] = highByte(short(result->cell_mv_max));
+  tx_msg.data[4] = 0;  // MAX Single Battery Cell Voltage Number [ToDo]
+  tx_msg.data[5] = 0;  // MAX Single Battery Cell Voltage Number [ToDo]
+  tx_msg.data[6] = 0;  // MIN Single Battery Cell Voltage Number [ToDo]
+  tx_msg.data[7] = 0;  // MIN Single Battery Cell Voltage Number [ToDo]
+  send_to_queue(tx_queue, &tx_msg);
+
+
+  tx_msg.identifier = 0x4240 + batteryID;
+  tx_msg.data[0] = lowByte(short(result->cell_temp_max + 1000));
+  tx_msg.data[1] = lowByte(short(result->cell_temp_max + 1000));
+  tx_msg.data[2] = lowByte(short(result->cell_temp_min + 1000));
+  tx_msg.data[3] = lowByte(short(result->cell_temp_min + 1000));
+  tx_msg.data[4] = 0;  // MAX Single Battery Cell Temperature Number [ToDo]
+  tx_msg.data[5] = 0;  // MAX Single Battery Cell Temperature Number [ToDo]
+  tx_msg.data[6] = 0;  // MIN Single Battery Cell Temperature Number [ToDo]
+  tx_msg.data[7] = 0;  // MIN Single Battery Cell VolTemperaturetage Number [ToDo]
+  send_to_queue(tx_queue, &tx_msg);
+
+  // Errors & Alarms [ToDo from Maxim errors)
+  uint16_t tmpAlarm = 0;
+  uint16_t tmp = 0;
+  // tmp = (alarm[0] & 0b00010000) >> 4;  // Bit0: Cell low Volt
+  // tmpAlarm |= tmp;
+  // tmp = (alarm[0] & 0b00000100) >> 1;  // Bit1: Cell high Volt
+  // tmpAlarm |= tmp;
+  // tmp = (alarm[0] & 0b00010000) >> 2;  // Bit2: Discharge low Volt
+  // tmpAlarm |= tmp;
+  // tmp = (alarm[0] & 0b00000100);  // Bit3: Charge high Volt
+  // tmpAlarm |= tmp;
+  // tmp = (alarm[1] & 0b00000001) << 3;  // Bit4: Charge Cell low Temp
+  // tmpAlarm |= tmp;
+  // tmp = (alarm[0] & 0b01000000) >> 2;  // Bit5: Charge Cell high Temp
+  // tmpAlarm |= tmp;
+  // tmp = (alarm[1] & 0b00000001) << 5;  // Bit6: Discharge Cell low Temp
+  // tmpAlarm |= tmp;
+  // tmp = (alarm[0] & 0b01000000);  // Bit7: Discharge Cell high Temp
+  // tmpAlarm |= tmp;
+  //tmp = 0b00000000; // Bit8: Charge Overcurrent [ToDo]
+  //tmpAlarm |= tmp;
+  //tmp = 0b01000000; // Bit9: Discharge Overcurrent [ToDo]
+  //tmpAlarm |= tmp;
+
+  char status = char((CANmilliamps * 0.01) < 0) ? 1 : (((CANmilliamps * 0.01) > 0) ? 2 : 3);
+
+  tx_msg.identifier = 0x4250 + batteryID;
+  tx_msg.data[0] = status;              // bit0-2: 0 = sleep, 1 = Charge, 2 = Discharge, 3 = Idle; Bit3: Force Charge; Bit4: Force Balance Charge; Bit5-7: Reserved; [ToDo]
+  tx_msg.data[1] = 0;                   // Cycle Period? [ToDo]
+  tx_msg.data[2] = 0;                   // Cycle Period? [ToDo]
+  tx_msg.data[3] = 0;                   // Error / Faults [ToDo] not implemented yet
+  tx_msg.data[4] = lowByte(tmpAlarm);   // Alarm
+  tx_msg.data[5] = highByte(tmpAlarm);  // Alarm
+  tx_msg.data[6] = 0;                   // Protection same as Alarm? [ToDo]
+  tx_msg.data[7] = 0;                   // Protection same as Alarm? [ToDo]
+  send_to_queue(tx_queue, &tx_msg);
+
+  //[??]
+  // MSG.id = 0x4260 + batteryID;  // Module Voltage MIN / MAX & Nr.
+  // MSG.id = 0x4270 + batteryID;  // Module Temp. MIN / MAX & Nr.
+  // MSG.id = 0x4280 + batteryID;  // Charge / Dischage foorbidden ?
+}
+
+void CanBus::BMS_GWHV_Info(BMS_Data *result, QueueHandle_t tx_queue) {
+  if (print_readings) {
+    Serial.println("CAN SEND ================> Send HV GW Inverter Info");
+  }
+  const char batteryID = 1;
+  twai_message_t tx_msg = { 0 };
+  tx_msg.extd = 1;
+  tx_msg.data_length_code = 8;
+
+  tx_msg.identifier = 0x7310 + batteryID;
+  tx_msg.data[0] = 0;  // Version 1=A, 2=B
+  tx_msg.data[1] = 0;  // reserved
+  tx_msg.data[2] = 3;  // Hardware Version e.g. 3.2
+  tx_msg.data[3] = 2;  // Hardware Version e.g. 3.2
+  tx_msg.data[4] = 3;  // Software Version e.g. 3.4 (03/2024)
+  tx_msg.data[5] = 4;  // Software Version e.g. 3.4 (03/2024)
+  tx_msg.data[6] = 0;  // Software Version ??
+  tx_msg.data[7] = 0;  // Software Version ??
+  send_to_queue(tx_queue, &tx_msg);
+
+  char num_slaves = char(result->pack_volts * 0.0104) + 1;  // 96v/pack
+  tx_msg.identifier = 0x7320 + batteryID;
+  tx_msg.data[0] = num_slaves;
+  tx_msg.data[1] = 0;
+  tx_msg.data[2] = num_slaves;
+  tx_msg.data[3] = 0;  // [ToDo] Cells per module
+  tx_msg.data[4] = 0;  // Volage Level?
+  tx_msg.data[5] = 0;  // Volage Level?
+  tx_msg.data[6] = 0;  // AH Number?
+  tx_msg.data[7] = 0;  // AH NUmber?
+  send_to_queue(tx_queue, &tx_msg);
+
+
+  tx_msg.identifier = 0x7330 + batteryID;
+  tx_msg.data[0] = 'z';
+  tx_msg.data[1] = 'z';
+  tx_msg.data[2] = 'z';
+  tx_msg.data[3] = 'z';
+  tx_msg.data[4] = 'z';
+  tx_msg.data[5] = 'z';
+  tx_msg.data[6] = 'z';
+  tx_msg.data[7] = 'z';
+  send_to_queue(tx_queue, &tx_msg);
+
+
+  tx_msg.identifier = 0x7340 + batteryID;
+  tx_msg.data[0] = 0;
+  tx_msg.data[1] = 0;
+  tx_msg.data[2] = 0;
+  tx_msg.data[3] = 0;
+  tx_msg.data[4] = 0;
+  tx_msg.data[5] = 0;
+  tx_msg.data[6] = 0;
+  tx_msg.data[7] = 0;
+  send_to_queue(tx_queue, &tx_msg);
+}
+
 
 // Function to compare two data arrays
 bool filter_data_array(const char *arr1, const char *arr2, size_t length) {

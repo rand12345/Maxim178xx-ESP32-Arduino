@@ -1,3 +1,4 @@
+#ifdef WIFI
 #include "ESP32MQTTClient.h"
 #include "secrets.h"
 #include <WiFi.h>
@@ -11,3 +12,4 @@ extern ESP32MQTTClient mqttClient;  // all params are set later
 
 void wifi_start();
 
+#endif
