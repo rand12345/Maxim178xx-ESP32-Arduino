@@ -1,23 +1,31 @@
+#include <cstdio>
 #include "Initialisation.h"
+#include "configuration.h"
 
 void Initialisation::Arduino_SPI_init() {
+  Serial.printf("Arduino_SPI_init\n");
   pinMode(SHDNL_MAX17841_1, OUTPUT);     // _SHDN pin on MAX17841 - high is active - low shutsdown ISO-UART bus
+  Serial.printf("1\n");
   pinMode(SS1, OUTPUT);     // _SHDN pin on MAX17841 - high is active - low shutsdown ISO-UART bus
+  Serial.printf("2\n");
   digitalWrite(SHDNL_MAX17841_1, LOW);
+  Serial.printf("3\n");
   digitalWrite(SS1, HIGH);               // disable Slave Select Pin
   delay(100);
   pinMode(SS1, OUTPUT);                  // Setting the Slave Select Pin as Output (custom)
   digitalWrite(SHDNL_MAX17841_1, HIGH);  // Enable MAX17841
   delay(2);
 
+  Serial.printf("4\n");
   SPI.begin(sck, miso, mosi, -1);                                         // Initializing the SPI in Micro-controller with CS disabled
   SPI.beginTransaction(SPISettings(SPI_FREQUENCY, MSBFIRST, SPI_MODE0));  // Initializing SPI frequency, SPI mode
+  Serial.printf("5\n");
 }
 
 void Initialisation::MAX178X_init_sequence() {
   wakeup();                      // Wake up instructions for start up
   int num_modules = helloall();  // Send Hello all command
-  config.num_modules = num_modules; // sets all calcs for min/max pack volts
+  update_num_modules(num_modules); // sets all calcs for min/max pack volts
 }
 
 void Initialisation::wakeup() {

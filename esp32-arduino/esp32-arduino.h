@@ -7,11 +7,11 @@
 #include "Initialisation.h"
 #include "CAN_config.h"
 #include <esp_task_wdt.h>
-#ifdef WIFI
+// #ifdef WIFI
 #include "wifi_task.h"
 TaskHandle_t wifiTaskHandle = NULL;
 
-#endif
+// #endif
 
 
 #define EXAMPLE_TAG "TWAI Alert and Recovery"
@@ -20,11 +20,11 @@ TaskHandle_t wifiTaskHandle = NULL;
 #define ON 1
 twai_message_t rxFrame;
 
-esp_task_wdt_config_t twdt_config = {
-  .timeout_ms = WDT_TIMEOUT_MS,
-  .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,  // Bitmask of all cores
-  .trigger_panic = true,
-};
+// esp_task_wdt_config_t twdt_config = {
+//   .timeout_ms = WDT_TIMEOUT_MS,
+//   .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,  // Bitmask of all cores
+//   .trigger_panic = true,
+// };
 
 int modules = 0;
 int PEC_VALUE = 0;

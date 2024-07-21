@@ -6,7 +6,7 @@
 
  //  Temp ADC consts
 const float R0 = 10000.0;   // 10kΩ at T0
-const float T0 = 298.15;    // 25°C in Kelvin
+const float _T0 = 298.15;    // 25°C in Kelvin
 const float BETA = 3400.0;  // Material constant β
 
 // ADC consts

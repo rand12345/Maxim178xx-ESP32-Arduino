@@ -1,6 +1,4 @@
-#ifndef WIFI_TASK_H
-#define WIFI_TASK_H
-#ifdef WIFI
+
 #include "wifi_task.h"
 
 void wifi_start() {
@@ -10,7 +8,7 @@ void wifi_start() {
   Serial.println("Connecting to WiFi");
   while (WiFi.status() != WL_CONNECTED) {
     vTaskDelay(pdMS_TO_TICKS(100));
-    Serial.println(WiFi.status());
+    // Serial.println(WiFi.status());
   }
   Serial.println(WiFi.localIP());
 
@@ -43,12 +41,3 @@ void wifi_start() {
   ArduinoOTA.begin();
 
 }
-
-
-
-
-
-
-
-#endif
-#endif

@@ -621,7 +621,7 @@ float calculateTemperature(uint16_t value) {
   float r_th_f = (float)value;
 
   // Calculate temperature in Kelvin
-  float temp_kelvin = BETA / (BETA / T0 + log(r_th_f / R0));
+  float temp_kelvin = BETA / (BETA / _T0 + log(r_th_f / R0));
 
   // Convert Kelvin to Celsius
   return temp_kelvin - 273.15;

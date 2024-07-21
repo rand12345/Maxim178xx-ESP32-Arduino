@@ -216,3 +216,14 @@ void print_config() {
 #endif
   Serial.println();
 }
+
+void update_num_modules(int num_modules) {
+  if (config.num_modules != num_modules) {
+    Serial.printf("Number of modules changed from %d to %d, rebooting",config.num_modules, num_modules);
+    config.num_modules = num_modules;
+    saveConfig();
+    delay(1000);
+    ESP.restart();
+  }
+  config.num_modules = num_modules;
+}

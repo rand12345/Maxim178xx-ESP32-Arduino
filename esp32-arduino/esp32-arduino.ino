@@ -21,13 +21,14 @@
 void setup() {
   Serial.begin(BAUDRATE);
   initializeEEPROM();
-#ifdef WIFI
+// #ifdef WIFI
   xTaskCreatePinnedToCore(WiFi_init, "WIFI_Task", 8192, NULL, 1, &wifiTaskHandle, 0);
-#endif
+// #endif
   // Contactors off
   digitalWrite(PRECHARGE_PIN, 0);
   digitalWrite(MAIN_CONTACTOR_PIN, 0);
   initialisation.Arduino_SPI_init();
+
   delay(500);
   print_config();
 
@@ -43,6 +44,7 @@ void setup() {
   };
 
   Serial.println("Data for inverter OK - Starting CAN");
+  
   rx_queue = xQueueCreate(100, sizeof(twai_message_t));
   tx_queue = xQueueCreate(50, sizeof(twai_message_t));
   xTaskCreatePinnedToCore(TWAI_Task, "TWAI_Task", 4096, NULL, 6, &twaiTaskHandle, 0);
@@ -349,7 +351,7 @@ void handle_keypress(char incomingByte) {
 }
 
 
-#ifdef WIFI
+// #ifdef WIFI
 ESP32MQTTClient mqttClient;
 void WiFi_init(void *pvParameters) {
   unsigned long mqtt_time = 0;
@@ -423,4 +425,4 @@ char *BMSDataToJson(const BMS_Data &inverter_data) {
   return jsonCharArray;
 }
 
-#endif
+// #endif
