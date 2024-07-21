@@ -3,7 +3,8 @@
 #include <stdarg.h>
 #include <SPI.h>
 #include "Arduino.h"
-#define SS1 7  // Actual slave select in microcontroller
+#include "configuration.h"
+// #define SS1 7  // Actual slave select in microcontroller
 
 extern int *SPI_return;
 
