@@ -31,8 +31,7 @@ void initializeEEPROM() {
 
 void reset_btn() {
   Serial.println("Press and hold MODE button for factory reset menu");
-  pinMode(RESET_EEPROM_PIN, INPUT_PULLUP);
-  delay(1000);
+  delay(3000);
   if (digitalRead(RESET_EEPROM_PIN) == LOW) {
     Serial.println("\n\nEEPROM CONFIG EDIT - ALL PERIPHERALS OFFLINE UNTIL REBOOT\n\n\r");
     eeprom_menu();

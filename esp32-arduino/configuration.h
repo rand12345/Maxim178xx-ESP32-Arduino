@@ -6,10 +6,6 @@
 #include "soc/gpio_sig_map.h"
 #include <EEPROM.h>
 
-// enables wifi and mqtt - requires secrets.h/cpp
-
-#define WIFI
-
 // Factory settings - can be edited altered in EEPROM menu
 
 #define F_EXPECTED_PACKS 3               //

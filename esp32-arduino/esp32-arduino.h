@@ -7,10 +7,11 @@
 #include "Initialisation.h"
 #include "CAN_config.h"
 #include <esp_task_wdt.h>
-// #ifdef WIFI
-#include "wifi_task.h"
-TaskHandle_t wifiTaskHandle = NULL;
+#include "ESP32MQTTClient.h"
+#include <ESPmDNS.h>
+#include <ArduinoJson.h>
 
+TaskHandle_t wifiTaskHandle = NULL;
 // #endif
 
 
@@ -59,7 +60,7 @@ Initialisation initialisation;
 PEC pec;
 BMS_SPI bms_SPI;
 
-void WiFi_init(void *pvParameters);
+void MQTT_task(void *pvParameters);
 char *BMSDataToJson(const BMS_Data &data);
 void TWAI_Task(void *pvParameters);
 void TWAI_Processing_Task(void *pvParameters);

@@ -18,13 +18,46 @@
 #include "driver/twai.h"
 #include <freertos/task.h>
 
+
+#include <WiFiManager.h>  // https://github.com/tzapu/WiFiManager
+WiFiManager wm;
+WiFiManagerParameter custom_mqtt_server("server", "MQTT server", "mqtt://test.mosquitto.org:1883", 40);
+WiFiManagerParameter custom_mqtt_user("user", "MQTT user", "", 40);
+WiFiManagerParameter custom_mqtt_password("password", "MQTT password", "", 40);
+WiFiManagerParameter custom_mqtt_topic("topic", "MQTT topic", "maxim_abc1/data", 80);
+
 void setup() {
   Serial.begin(BAUDRATE);
+  pinMode(RESET_EEPROM_PIN, INPUT_PULLUP);
   initializeEEPROM();
-// #ifdef WIFI
-  xTaskCreatePinnedToCore(WiFi_init, "WIFI_Task", 8192, NULL, 1, &wifiTaskHandle, 0);
-// #endif
+
+  Serial.println("Press and hold MODE button to reset WiFi and MQTT");
+  delay(3000);
+  if (digitalRead(RESET_EEPROM_PIN) == LOW) {
+    wm.resetSettings();
+    Serial.println("WiFi and MQTT settings reset");
+    Serial.println("Reconfigure by accessing local WiFi AP MaximController and http://192.168.4.1");
+  }
+
+
+  WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
+  wm.setConnectTimeout(60);
+  wm.addParameter(&custom_mqtt_server);
+  wm.addParameter(&custom_mqtt_user);
+  wm.addParameter(&custom_mqtt_password);
+  wm.addParameter(&custom_mqtt_topic);
+  wm.setConfigPortalBlocking(false);
+  wm.setSaveParamsCallback(saveParamsCallback);
+
+  if (wm.autoConnect("MaximController")) {
+    Serial.println("WiFi connected");
+  } else {
+    Serial.println("WiFi Configportal running");
+  }
+  xTaskCreatePinnedToCore(MQTT_task, "MQTT_task", 8192, NULL, 1, &wifiTaskHandle, 0);
+  
   // Contactors off
+  
   digitalWrite(PRECHARGE_PIN, 0);
   digitalWrite(MAIN_CONTACTOR_PIN, 0);
   initialisation.Arduino_SPI_init();
@@ -36,22 +69,25 @@ void setup() {
   xTaskCreatePinnedToCore(SPI_Task, "SPI_Task", 8192, NULL, 1, &spiTaskHandle, 0);
   Serial.println("Waiting for good battery data");
 
+    vTaskDelay(pdMS_TO_TICKS(3000));
   for (;;) {
+    wm.process();
     if (!has_errors(&inverter_data)) {
       break;
     }
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(100));
   };
 
   Serial.println("Data for inverter OK - Starting CAN");
-  
+
   rx_queue = xQueueCreate(100, sizeof(twai_message_t));
   tx_queue = xQueueCreate(50, sizeof(twai_message_t));
   xTaskCreatePinnedToCore(TWAI_Task, "TWAI_Task", 4096, NULL, 6, &twaiTaskHandle, 0);
   xTaskCreatePinnedToCore(TWAI_Processing_Task, "TWAI_Processing_Task", 4096, NULL, 4, &twaiprocessTaskHandle, 0);
 
-  vTaskDelay(pdMS_TO_TICKS(5000));
+  // vTaskDelay(pdMS_TO_TICKS(5000));
   handle_keypress('?');  // display menu
+  
 }
 
 void interrupt_pin() {
@@ -65,8 +101,8 @@ void loop() {
     char incomingByte = Serial.read();
     handle_keypress(incomingByte);
   }
-}  // App in threads only
 
+}  // App in threads only
 
 void TWAI_Processing_Task(void *pvParameters) {
   char contactor = 0;
@@ -339,10 +375,6 @@ void handle_keypress(char incomingByte) {
     vTaskDelete(twaiTaskHandle);
     vTaskDelay(pdMS_TO_TICKS(100));  // Give some time for the message to be sent
     vTaskDelete(twaiprocessTaskHandle);
-#ifdef WIFI
-    Serial.println("Killing wifi, mqtt...");
-    vTaskDelete(wifiTaskHandle);
-#endif
     Serial.println("Rebooting the ESP in 1 second...");
     digitalWrite(SHDNL_MAX17841_1, LOW);
     delay(1000);
@@ -351,15 +383,22 @@ void handle_keypress(char incomingByte) {
 }
 
 
-// #ifdef WIFI
-ESP32MQTTClient mqttClient;
-void WiFi_init(void *pvParameters) {
-  unsigned long mqtt_time = 0;
-  Serial.println("WiFi Task");
-  wifi_start();
 
-  // for (;;) {
-  mqttClient.setURI(MQTT_SERVER, MQTT_USERNAME, MQTT_PASSWORD);
+void saveParamsCallback() {
+  Serial.println("MQTT params stored");
+  vTaskDelay(pdMS_TO_TICKS(500));  // low pri-task
+}
+
+ESP32MQTTClient mqttClient;
+void MQTT_task(void *pvParameters) {
+  while (WiFi.status() != WL_CONNECTED) {
+    wm.process();
+    vTaskDelay(pdMS_TO_TICKS(10));  // low pri-task
+  }
+
+  unsigned long mqtt_time = 0;
+  Serial.println("MQTT Task");
+  mqttClient.setURI(custom_mqtt_server.getValue(), custom_mqtt_user.getValue(), custom_mqtt_password.getValue());
 
   char mqttClientName[50];
   uint64_t chipid = ESP.getEfuseMac();  // The chip ID is essentially the MAC address
@@ -368,13 +407,14 @@ void WiFi_init(void *pvParameters) {
   mqttClient.enableLastWillMessage("lwt", "Maxim going offline");
   mqttClient.setKeepAlive(30);
   mqttClient.loopStart();
-  while (1) {
-    ArduinoOTA.handle();
-    vTaskDelay(pdMS_TO_TICKS(1000));  // low pri-task
+  for (;;) {
+    // ArduinoOTA.handle();
+    wm.process();
+    vTaskDelay(pdMS_TO_TICKS(10));  // low pri-task
     if ((mqtt_time + 5000) > millis()) { continue; }
     mqtt_time = millis();
     char *jsonChar = BMSDataToJson(inverter_data);
-    mqttClient.publish(MQTT_TOPIC, jsonChar, 0, false);
+    mqttClient.publish(custom_mqtt_topic.getValue(), jsonChar, 0, false);
     free(jsonChar);
   }
   // }
