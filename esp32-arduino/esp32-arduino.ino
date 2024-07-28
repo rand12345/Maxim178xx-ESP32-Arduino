@@ -21,27 +21,43 @@
 
 #include <WiFiManager.h>  // https://github.com/tzapu/WiFiManager
 WiFiManager wm;
-WiFiManagerParameter custom_mqtt_server("server", "MQTT server", "mqtt://test.mosquitto.org:1883", 40);
+MQTTConfig mqtt_config;
+
+unsigned int timeout = 120;  // seconds to run for
+unsigned int startTime = millis();
+bool portalRunning = false;
+bool startAP = false;  // start AP and webserver if true, else start only webserver
+
+WiFiManagerParameter custom_mqtt_server("server", "MQTT server", "", 40);
 WiFiManagerParameter custom_mqtt_user("user", "MQTT user", "", 40);
 WiFiManagerParameter custom_mqtt_password("password", "MQTT password", "", 40);
-WiFiManagerParameter custom_mqtt_topic("topic", "MQTT topic", "maxim_abc1/data", 80);
+WiFiManagerParameter custom_mqtt_topic("topic", "MQTT topic", "", 80);
+// WiFiManagerParameter custom_num_slaves("18", "Number of slaves", "", 2);
+// WiFiManagerParameter custom_num_cells("6", "Number of cells", "", 2);
+char espClientName[50];
 
 void setup() {
-  Serial.begin(BAUDRATE);
   pinMode(RESET_EEPROM_PIN, INPUT_PULLUP);
+  // Contactors off
+  digitalWrite(PRECHARGE_PIN, 0);
+  digitalWrite(MAIN_CONTACTOR_PIN, 0);
+
+  Serial.begin(BAUDRATE);
   initializeEEPROM();
 
-  Serial.println("Press and hold MODE button to reset WiFi and MQTT");
-  delay(3000);
-  if (digitalRead(RESET_EEPROM_PIN) == LOW) {
-    wm.resetSettings();
-    Serial.println("WiFi and MQTT settings reset");
-    Serial.println("Reconfigure by accessing local WiFi AP MaximController and http://192.168.4.1");
-  }
+  uint64_t chipid = ESP.getEfuseMac();
+  snprintf(espClientName, 50, "ESP32MAXIM-%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
 
+  custom_mqtt_server.setValue(mqtt_config.server, strlen(mqtt_config.server));
+  custom_mqtt_user.setValue(mqtt_config.user, strlen(mqtt_config.user));
+  custom_mqtt_password.setValue(mqtt_config.password, strlen(mqtt_config.password));
+  custom_mqtt_topic.setValue(mqtt_config.topic, strlen(mqtt_config.topic));
+  // custom_num_slaves.setValue(String(config.num_slaves), 2);
+  // custom_num_cells.setValue(String(config.num_slaves), 2);
 
   WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
   wm.setConnectTimeout(60);
+  wm.setConfigPortalTimeout(360);
   wm.addParameter(&custom_mqtt_server);
   wm.addParameter(&custom_mqtt_user);
   wm.addParameter(&custom_mqtt_password);
@@ -49,27 +65,25 @@ void setup() {
   wm.setConfigPortalBlocking(false);
   wm.setSaveParamsCallback(saveParamsCallback);
 
-  if (wm.autoConnect("MaximController")) {
-    Serial.println("WiFi connected");
+  if (wm.autoConnect(espClientName)) {
+    Serial.println("WiFi STA connected");
   } else {
     Serial.println("WiFi Configportal running");
   }
+
   xTaskCreatePinnedToCore(MQTT_task, "MQTT_task", 8192, NULL, 1, &wifiTaskHandle, 0);
-  
-  // Contactors off
-  
-  digitalWrite(PRECHARGE_PIN, 0);
-  digitalWrite(MAIN_CONTACTOR_PIN, 0);
+
   initialisation.Arduino_SPI_init();
 
-  delay(500);
+  vTaskDelay(pdMS_TO_TICKS(500));
   print_config();
 
   initialisation.MAX178X_init_sequence();
   xTaskCreatePinnedToCore(SPI_Task, "SPI_Task", 8192, NULL, 1, &spiTaskHandle, 0);
+
   Serial.println("Waiting for good battery data");
 
-    vTaskDelay(pdMS_TO_TICKS(3000));
+  vTaskDelay(pdMS_TO_TICKS(3000));
   for (;;) {
     wm.process();
     if (!has_errors(&inverter_data)) {
@@ -85,15 +99,12 @@ void setup() {
   xTaskCreatePinnedToCore(TWAI_Task, "TWAI_Task", 4096, NULL, 6, &twaiTaskHandle, 0);
   xTaskCreatePinnedToCore(TWAI_Processing_Task, "TWAI_Processing_Task", 4096, NULL, 4, &twaiprocessTaskHandle, 0);
 
-  // vTaskDelay(pdMS_TO_TICKS(5000));
   handle_keypress('?');  // display menu
-  
 }
 
 void interrupt_pin() {
   Serial.println("******************** INT LOW ********************");  // placeholder for MAX17841b interrupt handling
 }
-
 
 void loop() {
   vTaskDelay(pdMS_TO_TICKS(100));
@@ -101,7 +112,7 @@ void loop() {
     char incomingByte = Serial.read();
     handle_keypress(incomingByte);
   }
-
+  doWiFiManager();
 }  // App in threads only
 
 void TWAI_Processing_Task(void *pvParameters) {
@@ -177,25 +188,19 @@ void TWAI_Processing_Task(void *pvParameters) {
 void TWAI_Task(void *pvParameters) {
   // enable panic so ESP32 restarts on can failure
   Serial.println("TWAI_Task Start");
-  if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
-    Serial.println("Driver installed");
-  } else {
+  if (twai_driver_install(&g_config, &t_config, &f_config) != ESP_OK) {
     Serial.println("Failed to install driver");
     return;
   }
 
   // Start TWAI driver
-  if (twai_start() == ESP_OK) {
-    Serial.println("Driver started");
-  } else {
+  if (twai_start() != ESP_OK) {
     Serial.println("Failed to start driver");
     return;
   }
 
   uint32_t alerts_to_enable = TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR | TWAI_ALERT_RX_QUEUE_FULL;
-  if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
-    Serial.println("CAN Alerts reconfigured");
-  } else {
+  if (twai_reconfigure_alerts(alerts_to_enable, NULL) != ESP_OK) {
     Serial.println("Failed to reconfigure alerts");
     return;
   }
@@ -298,11 +303,9 @@ void TWAI_Task(void *pvParameters) {
   vTaskDelete(NULL);
 }
 
-
-
 void SPI_Task(void *pvParameters) {
   Maxim *maxim = Maxim::build();
-  Serial.println("SPI_Task Maxim instanitated");
+  Serial.println("SPI_Task Maxim started");
 
 #ifdef MAXIM_WATCHDOG
   esp_task_wdt_add(NULL);
@@ -377,44 +380,51 @@ void handle_keypress(char incomingByte) {
     vTaskDelete(twaiprocessTaskHandle);
     Serial.println("Rebooting the ESP in 1 second...");
     digitalWrite(SHDNL_MAX17841_1, LOW);
-    delay(1000);
     ESP.restart();  // Reboot the ESP
   }
 }
 
-
-
 void saveParamsCallback() {
+  strcpy(mqtt_config.server, custom_mqtt_server.getValue());
+  strcpy(mqtt_config.user, custom_mqtt_user.getValue());
+  strcpy(mqtt_config.password, custom_mqtt_password.getValue());
+  strcpy(mqtt_config.topic, custom_mqtt_topic.getValue());
+  saveMQTTConfig();
+  vTaskDelay(pdMS_TO_TICKS(1000));
+
+  Serial.print(custom_mqtt_server.getValue());
+  Serial.print(" stored as ");
+  Serial.println(mqtt_config.server);
+
   Serial.println("MQTT params stored");
-  vTaskDelay(pdMS_TO_TICKS(500));  // low pri-task
 }
 
 ESP32MQTTClient mqttClient;
 void MQTT_task(void *pvParameters) {
   while (WiFi.status() != WL_CONNECTED) {
-    wm.process();
     vTaskDelay(pdMS_TO_TICKS(10));  // low pri-task
   }
-
   unsigned long mqtt_time = 0;
-  Serial.println("MQTT Task");
-  mqttClient.setURI(custom_mqtt_server.getValue(), custom_mqtt_user.getValue(), custom_mqtt_password.getValue());
-
-  char mqttClientName[50];
-  uint64_t chipid = ESP.getEfuseMac();  // The chip ID is essentially the MAC address
-  snprintf(mqttClientName, 50, "MAXIM-%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
-  mqttClient.setMqttClientName(mqttClientName);
-  mqttClient.enableLastWillMessage("lwt", "Maxim going offline");
+  Serial.printf("MQTT Task: Connecting to %s @ %s\n\r", mqtt_config.user, mqtt_config.server);
+  mqttClient.setURI(mqtt_config.server, mqtt_config.user, mqtt_config.password);
+  // char mqttClientName[50];
+  // uint64_t chipid = ESP.getEfuseMac();  // The chip ID is essentially the MAC address
+  // snprintf(mqttClientName, 50, "MAXIM-%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
+  mqttClient.setMqttClientName(espClientName);
+  mqttClient.enableLastWillMessage("lwt", "Maxim offline");
   mqttClient.setKeepAlive(30);
   mqttClient.loopStart();
+
+
   for (;;) {
     // ArduinoOTA.handle();
-    wm.process();
     vTaskDelay(pdMS_TO_TICKS(10));  // low pri-task
     if ((mqtt_time + 5000) > millis()) { continue; }
     mqtt_time = millis();
+    if (inverter_data.soc == 0) { continue; }
     char *jsonChar = BMSDataToJson(inverter_data);
-    mqttClient.publish(custom_mqtt_topic.getValue(), jsonChar, 0, false);
+    mqttClient.publish(mqtt_config.topic, jsonChar, 0, false);
+    // Serial.printf("MQTT: %s = %s", custom_mqtt_topic.getValue(), jsonChar);
     free(jsonChar);
   }
   // }
@@ -465,4 +475,36 @@ char *BMSDataToJson(const BMS_Data &inverter_data) {
   return jsonCharArray;
 }
 
-// #endif
+void doWiFiManager() {
+  // is auto timeout portal running
+
+  wm.process();
+  if (portalRunning) {
+    wm.process();  // do processing
+
+    // check for timeout
+    if ((millis() - startTime) > (timeout * 1000)) {
+      Serial.println("portaltimeout");
+      portalRunning = false;
+      if (startAP) {
+        wm.stopConfigPortal();
+      } else {
+        wm.stopWebPortal();
+      }
+    }
+  }
+
+  // is configuration portal requested?
+  if (digitalRead(RESET_EEPROM_PIN) == LOW && (!portalRunning)) {
+    if (startAP) {
+      Serial.println("Button Pressed, Starting Config Portal");
+      wm.setConfigPortalBlocking(false);
+      wm.startConfigPortal();
+    } else {
+      Serial.println("Button Pressed, Starting Web Portal");
+      wm.startWebPortal();
+    }
+    portalRunning = true;
+    startTime = millis();
+  }
+}

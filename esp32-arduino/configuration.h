@@ -8,8 +8,8 @@
 
 // Factory settings - can be edited altered in EEPROM menu
 
-#define F_EXPECTED_PACKS 3               //
-#define F_CELLS_PER_SLAVE 12              //
+#define F_EXPECTED_PACKS 18               //
+#define F_CELLS_PER_SLAVE 6              //
 #define F_PANIC_MAX_CELL_MILLIVOLTS 4250  // opens contactors
 #define F_MAX_CELL_MILLIVOLTS 4200        // shuts down charging
 #define F_MIN_CELL_MILLIVOLTS 3300        // opens contactors
@@ -20,21 +20,21 @@
 #define F_SLAVE_KWH 2.73
 #define F_MAX_SOC 100       // These values halt charging
 #define F_MIN_SOC 5         // and discharging
-#define F_MAX_CHARGE 30     // rate in amps - desired W/min pack volts
-#define F_MAX_DISCHARGE 30  // rate in amps
+#define F_MAX_CHARGE 35     // rate in amps - desired W/min pack volts
+#define F_MAX_DISCHARGE 35  // rate in amps
 
 
 // Pack configuration for non-consecutive cells
 // #define CELL_CONFIGURATION CELL1 | CELL2 | CELL3 | CELL4 | CELL8 | CELL9 | CELL10 | CELL11 // ZOE 2021 modular = 1-4, 8-11
 
 // GPIO
-#define sck 18//5
-#define miso 19//6
-#define mosi 23//4
-#define SS1 22//7                // chip select for MAX17841
+#define sck 5
+#define miso 6
+#define mosi 4
+#define SS1 7                // chip select for MAX17841
 #define SS2 7                // Optional Slave select if Dual UART is used
 #define INT_MAX17841_1 8     // Interrupt pin for MAX17841 (unused)
-#define SHDNL_MAX17841_1 5//10  // Shut down pin for MAX17841 (essential)
+#define SHDNL_MAX17841_1 10  // Shut down pin for MAX17841 (essential)
 
 
 // CAN IDs for receiver
@@ -59,11 +59,11 @@
 #define CAN_RX_PIN 3
 #else
 #define TWAI_TX_SIGNAL_IDX TWAI_TX_IDX
-#define RESET_EEPROM_PIN 0
+#define RESET_EEPROM_PIN 3
 #define PRECHARGE_PIN 9
 #define MAIN_CONTACTOR_PIN 9
-#define CAN_TX_PIN 4
-#define CAN_RX_PIN 2
+#define CAN_TX_PIN 0
+#define CAN_RX_PIN 1
 #endif
 
 
@@ -90,6 +90,21 @@
 #define CELL12 (1 << 12)
 
 #define EEPROM_SIZE 512  // Define the size of the EEPROM
+const int MQTT_EEPROM_LOCATION = 32;
+
+struct MQTTConfig {
+    char server[80];
+    char user[40];
+    char password[40];
+    char topic[40];
+};
+
+const MQTTConfig defaultmqttConfig = {
+  "mqtt://test.mosquitto.org:1883",
+  "",
+  "",
+  "maxim_abc1/data",
+};
 
 struct Configuration {
   uint8_t num_modules;
@@ -135,9 +150,16 @@ const Configuration defaultConfig = {
 };
 
 
+
 // Function declarations
+
+// make these into classes
+// *MQTTconfig getMQTTConfig();
+// void saveMQTTConfig(); 
+
 void loadConfig();
 void saveConfig();
+void saveMQTTConfig();
 void reset_btn();
 void resetConfig();
 void initializeEEPROM();

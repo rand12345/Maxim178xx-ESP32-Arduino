@@ -1,6 +1,21 @@
 #include "configuration.h"
 
 Configuration config;
+extern MQTTConfig mqtt_config;
+
+void saveMQTTConfig() {
+  EEPROM.put(MQTT_EEPROM_LOCATION, mqtt_config);
+  EEPROM.commit();
+}
+
+void loadMQTTConfig() {
+  EEPROM.get(MQTT_EEPROM_LOCATION, mqtt_config);
+  if (EEPROM.read(MQTT_EEPROM_LOCATION) == 0xFF) {
+    mqtt_config = defaultmqttConfig;
+    saveMQTTConfig();
+  }
+}
+
 
 int max_cells() {
   int val = (config.num_modules * config.cells_per_slave);
@@ -26,6 +41,7 @@ int low_pack_voltage_cutoff() {
 void initializeEEPROM() {
   EEPROM.begin(EEPROM_SIZE);
   loadConfig();
+  loadMQTTConfig();
   reset_btn();
 }
 
@@ -42,6 +58,7 @@ void reset_btn() {
 }
 
 void loadConfig() {
+  Serial.printf("Size of config %d", sizeof(config));
   EEPROM.get(0, config);
   // Check if EEPROM is empty (first byte will be 0xFF if empty)
   if (EEPROM.read(0) == 0xFF) {
@@ -99,7 +116,12 @@ void eeprom_menu() {
 }
 
 void displayConfig() {
-  Serial.println("\nCurrent Configuration:");
+  Serial.println("\nMQTT Configuration:");
+  Serial.println("Server: " + String(mqtt_config.server));
+  Serial.println("Username: " + String(mqtt_config.user));
+  Serial.println("Password: " + String(mqtt_config.password));
+  Serial.println("Pub topic: " + String(mqtt_config.topic));
+  Serial.println("\nBattery Configuration:");
   Serial.printf("1. num_modules: %d (discovered)\n\r", (int)config.num_modules);
   Serial.println("2. cells_per_slave: " + String(config.cells_per_slave));
   Serial.println("3. panic_max_cell_millivolts: " + String(config.panic_max_cell_millivolts));
@@ -114,11 +136,11 @@ void displayConfig() {
   Serial.println("c. min_soc: " + String(config.min_soc));
   Serial.println("d. max_charge: " + String(config.max_charge));
   Serial.println("e. max_discharge: " + String(config.max_discharge));
-  Serial.printf("f. pack_voltage_divisor: %d", (int)config.pack_voltage_divisor);
+  Serial.printf("f. pack_voltage_divisor: %d \n\r", (int)config.pack_voltage_divisor);
 }
 
 bool changeSetting(char settingNumber) {
-  Serial.println("Enter new value followed by CRLF: " + String(settingNumber));
+  Serial.println("\n\rEnter new value followed by CRLF: " + String(settingNumber));
   while (!Serial.available()) {
     vTaskDelay(pdMS_TO_TICKS(10));
   }
@@ -218,7 +240,7 @@ void print_config() {
 
 void update_num_modules(int num_modules) {
   if (config.num_modules != num_modules) {
-    Serial.printf("Number of modules changed from %d to %d, rebooting",config.num_modules, num_modules);
+    Serial.printf("Number of modules changed from %d to %d, rebooting", config.num_modules, num_modules);
     config.num_modules = num_modules;
     saveConfig();
     delay(1000);
