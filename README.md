@@ -124,7 +124,7 @@ We welcome contributions to enhance this project. Feel free to fork the reposito
 
 ## License 📜
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under conditional non-commercial license. See the LICENCE.md file for details.
 
 ## Contact 📧
 
