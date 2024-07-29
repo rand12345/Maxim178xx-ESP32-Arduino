@@ -57,14 +57,6 @@ bool Maxim823Device::enable_measurement() {
   delay(1);
   return true;
 }
-// void Maxim823Device::init_values() {
-//   data->cell_mv_min = 0xffff;
-//   data->cell_mv_max = 0;
-//   data->cell_temp_min = 256.0;
-//   data->cell_temp_max = -256.0;
-//   data->pack_volts = 0.0;
-//   data->num_bal_cells = 0;
-// }
 
 bool Maxim823Device::single_scan() {
   short reg_val = STARTSCAN | X8OVERSAMPLE;  // x8 oversample
@@ -100,7 +92,6 @@ void Maxim823Device::read_cell_temp() {
   int module = 0;
   for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
     unsigned short raw = (SPI_return[idx]) + (SPI_return[idx + 1] << 8);
-    // Serial.printf("M: %d : %x", module, );
     float temp = ((raw >> 4) - 1680) * 0.03125;
     data->cell_temp[module] = (int16_t)temp;
     if (temp > data->cell_temp_max) {
@@ -124,7 +115,7 @@ void Maxim823Device::cell_V() {
     SPI_return = spi_read(ALL, cell_pointer);
     for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
       unsigned short raw = ((SPI_return[idx]) + (SPI_return[idx + 1] << 8) >> 2);  // local variable
-      // important, reset min cell reference for balancing LV ADV val at begining of samplingof first slave
+      // important, reset min cell reference for balancing LV ADV val at begining of sampling first slave
 
       // +10mv = +33 adc
       if ((0 == module) && (cell_pointer == ADDR_CELL1REG)) {
@@ -188,13 +179,10 @@ void Maxim823Device::block_V() {
 void Maxim823Device::read_balance() {
   SPI_return = spi_read(ALL, ADDR_BALSWEN);
   for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
-
     for (int i = 0; i < data->num_modules; i++) {
       if (i % 3 == 0) {
         Serial.println();
       }
-
-      // SPI_return = spi_read(i, ADDR_BALUVSTAT);  // auto mode
       short shunts = SPI_return[idx] | (short)SPI_return[idx + 1] << 8;
       Serial.printf("# %d -> ", i);
       print_shunts(shunts);
@@ -204,7 +192,7 @@ void Maxim823Device::read_balance() {
 }
 
 void Maxim823Device::calc_balance_bits(char module) {
-  // 2. Host determines which cells to balance and associated balancing time.
+  // Host determines which cells to balance and associated balancing time.
   data->balance_bits[module] = 0;  // Clear all balance status
   bits_remainder[module] = 0;      // clear all
 
@@ -213,7 +201,6 @@ void Maxim823Device::calc_balance_bits(char module) {
     short cell_mv = data->cell_millivolts[index];
     if (cell_balance_conditions(data->cell_mv_min, cell_mv)) {
       // If this cell is within the hysteresis of the lowest cell and above the minimum balance voltage threshold then mark it for balancing.
-
       data->balance_bits[module] |= 1 << cell;
       data->num_bal_cells++;
     }
@@ -236,7 +223,6 @@ void Maxim823Device::do_balance() {
     unsigned short bits = 0;
     // Counter is cyclical over 1 second and is generated in the main lool (0->3). Each step represents 250ms.
     if (data->cell_mv_max < config.balance_mv_threshold) {  // Whole pack
-      // Serial.printf("Balancing off - Cells under threshold %dvM", config.balance_mv_threshold);
       for (char module = 0; module < data->num_modules; module++) {
         data->balance_bits[module] = 0;  // Clear all balance status
         bits_remainder[module] = 0;      // clear all
@@ -260,10 +246,6 @@ void Maxim823Device::do_balance() {
     vTaskDelay(pdMS_TO_TICKS(config.shunt_on_time_ms));
   }
 }
-
-
-
-
 
 void Maxim823Device::calculate_soc() {
   unsigned int accum = 0;
@@ -313,12 +295,9 @@ void Maxim823Device::debug_balance() {
   Serial.printf("CBDIV %x | CBTIMER %x", cbdiv, cbtimer);
 }
 
-
-
 /*
   Helper functions ===============================================
 */
-
 
 inline short toggle_adjacent_bits(const short bits, short *bits_remainder) {
   short result = 0;
@@ -345,11 +324,13 @@ inline short toggle_adjacent_bits(const short bits, short *bits_remainder) {
   }
   return result;
 }
+
 void print_shunts(uint16_t value) {
   for (char i = 0; i < config.cells_per_slave; i++) {
     Serial.printf("%d:%d ", i + 1, (value & (1 << i)) ? 1 : 0);
   }
 }
+
 short values_crc(const BMS_Data *result) {
   char num_cells = result->num_modules * config.cells_per_slave;
   short crc = pec_uint16(num_cells, result->cell_millivolts);

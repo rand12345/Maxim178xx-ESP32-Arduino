@@ -12,13 +12,10 @@ int *Maxim852Device::spi_read(char module, char reg) {
   char read_num = (READALL == command) ? (5 + (config.cells_per_slave * 2)) : (7);
   // if certain command -> SPI_commands(X, ....) change X and NULL_XX to suit
   PEC_VALUE = pec.pec_code(3, command, reg, DATA_CHECK);  // PEC calculation for BITS READALL,ADDR_SCANCTRL,DATA_CHECK
-  // bms_SPI.SPI_commands(7, WR_LD_Q0, 6, command, reg, DATA_CHECK, PEC_VALUE, ALIVE_COUNTER);
   bms_SPI.SPI_commands(7, WR_LD_Q0, read_num, command, reg, DATA_CHECK, PEC_VALUE, ALIVE_COUNTER);
-  // Serial.printf("Reader: %x %x %x %x %x %x %x \n\r", WR_LD_Q0, read_num, command, reg, DATA_CHECK, PEC_VALUE, ALIVE_COUNTER);
   bms_SPI.SPI_commands(1, WR_NXT_LD_Q0);
   SPI_return = bms_SPI.SPI_read_register(read_num, RD_NXT_MSG);
-  // Serial.printf("Read:   %x %x %x %x %x %x %x \n\r", SPI_return[0], SPI_return[1], SPI_return[2], SPI_return[3], SPI_return[4], SPI_return[5], SPI_return[6]);
-  // SPI command for Read Load Que
+  // SPI command for Read Load Q
   PEC_check_status = pec.PEC_Check(1, 5, SPI_return);  // Checks the calculated and hardware returned PEC
   bms_SPI.SPI_commands(2, READ_RX_INTERRUPT_FLAGS, 0x00);
   bms_SPI.SPI_commands(2, READ_RX_STATUS, 0x00);
@@ -33,7 +30,6 @@ int *Maxim852Device::spi_write(char module, char reg, short reg_data) {
     default:
       command = module << 3 | WRITEDEVICE;
   }
-
   char lsb = lowByte(reg_data);
   char msb = highByte(reg_data);
   // if certain command -> SPI_commands(X, ....) change X and NULL_XX to suit
@@ -47,7 +43,6 @@ int *Maxim852Device::spi_write(char module, char reg, short reg_data) {
   bms_SPI.SPI_commands(2, 0x01, NULL_XX);
   return SPI_return;
 }
-
 
 bool Maxim852Device::clear_status_fmea() {
   Serial.println("Init Max17852");

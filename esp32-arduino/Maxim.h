@@ -30,7 +30,7 @@ enum DeviceModel {
 typedef struct
 {
   long timestamp;
-  int errors[MAX_SLAVES + 1];
+  int errors[MAX_SLAVES + 1];  // +1 represents global errors
   char num_modules;
   char num_bal_cells;
   long milliamps;
@@ -40,10 +40,10 @@ typedef struct
   float cell_temp_max;
   float pack_volts;
   float soc;
-  uint16_t cell_millivolts[MAX_CELLS];  // Array to hold up to 108 cells
-  int16_t die_temp[MAX_SLAVES];         // Array to hold MAX17823 IC temperatures
-  int16_t cell_temp[MAX_SLAVES];        // Array to hold MAX17823 IC temperatures
-  uint16_t balance_bits[MAX_SLAVES];    // Array to hold all cells to be balanced
+  uint16_t cell_millivolts[MAX_CELLS];  // up to 14 * 32 cells
+  int16_t die_temp[MAX_SLAVES];         // MAX17823 IC temperatures
+  int16_t cell_temp[MAX_SLAVES];        // MAX17823 PCB temperatures
+  uint16_t balance_bits[MAX_SLAVES];    // all cells to be balanced
 } BMS_Data;
 
 extern BMS_Data maxim_data, inverter_data;
@@ -84,9 +84,7 @@ protected:
   virtual void calculate_soc() = 0;
   virtual void do_balance() = 0;
 
-
   static int *spi_read(char module, char reg) {
-
     char command = READALL;
     switch (module) {
       case ALL:
@@ -147,7 +145,6 @@ protected:
   }
 
 private:
-  // BMS_Data *data;
 
   static DeviceModel detect_device() {
     Serial.println("Detecting Maxim model");
@@ -188,7 +185,6 @@ private:
   void cell_V();
   void block_V();
   void calculate_soc();
-  // void validate_cell_delta();
   void do_balance();
   void read_balance();
   void debug_balance();
@@ -203,8 +199,6 @@ class Maxim823Device : public Maxim {
 public:
   Maxim823Device()
     : Maxim() {
-    // this->data = new BMS_Data();
-    // this->data->num_modules = config.num_modules;
     clear_status_fmea();
     enable_measurement();
   }
@@ -218,7 +212,6 @@ private:
   void cell_V();
   void block_V();
   void calculate_soc();
-  // void validate_cell_delta();
   void do_balance();
   void read_balance();
   void debug_balance();

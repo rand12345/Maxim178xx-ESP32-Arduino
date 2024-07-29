@@ -19,23 +19,6 @@
 #include <freertos/task.h>
 
 
-#include <WiFiManager.h>  // https://github.com/tzapu/WiFiManager
-WiFiManager wm;
-MQTTConfig mqtt_config;
-
-unsigned int timeout = 120;  // seconds to run for
-unsigned int startTime = millis();
-bool portalRunning = false;
-bool startAP = false;  // start AP and webserver if true, else start only webserver
-
-WiFiManagerParameter custom_mqtt_server("server", "MQTT server", "", 40);
-WiFiManagerParameter custom_mqtt_user("user", "MQTT user", "", 40);
-WiFiManagerParameter custom_mqtt_password("password", "MQTT password", "", 40);
-WiFiManagerParameter custom_mqtt_topic("topic", "MQTT topic", "", 80);
-// WiFiManagerParameter custom_num_slaves("18", "Number of slaves", "", 2);
-// WiFiManagerParameter custom_num_cells("6", "Number of cells", "", 2);
-char espClientName[50];
-
 void setup() {
   pinMode(RESET_EEPROM_PIN, INPUT_PULLUP);
   // Contactors off
@@ -43,35 +26,29 @@ void setup() {
   digitalWrite(MAIN_CONTACTOR_PIN, 0);
 
   Serial.begin(BAUDRATE);
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+  led.clear();
+#endif
+
   initializeEEPROM();
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+  led.red(255).update();
+#endif
 
-  uint64_t chipid = ESP.getEfuseMac();
-  snprintf(espClientName, 50, "ESP32MAXIM-%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
+  if (setup_wifi()) {
+    ota();
+    xTaskCreatePinnedToCore(STA_task, "STA_task", 8192, NULL, 1, &wifiTaskHandle, 0);
 
-  custom_mqtt_server.setValue(mqtt_config.server, strlen(mqtt_config.server));
-  custom_mqtt_user.setValue(mqtt_config.user, strlen(mqtt_config.user));
-  custom_mqtt_password.setValue(mqtt_config.password, strlen(mqtt_config.password));
-  custom_mqtt_topic.setValue(mqtt_config.topic, strlen(mqtt_config.topic));
-  // custom_num_slaves.setValue(String(config.num_slaves), 2);
-  // custom_num_cells.setValue(String(config.num_slaves), 2);
-
-  WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
-  wm.setConnectTimeout(60);
-  wm.setConfigPortalTimeout(360);
-  wm.addParameter(&custom_mqtt_server);
-  wm.addParameter(&custom_mqtt_user);
-  wm.addParameter(&custom_mqtt_password);
-  wm.addParameter(&custom_mqtt_topic);
-  wm.setConfigPortalBlocking(false);
-  wm.setSaveParamsCallback(saveParamsCallback);
-
-  if (wm.autoConnect(espClientName)) {
-    Serial.println("WiFi STA connected");
   } else {
-    Serial.println("WiFi Configportal running");
+    ap_mode = true;
   }
-
-  xTaskCreatePinnedToCore(MQTT_task, "MQTT_task", 8192, NULL, 1, &wifiTaskHandle, 0);
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+  if (ap_mode) {
+    led.blue(255).update();
+  } else {
+    led.red(0).blue(255).update();
+  }
+#endif
 
   initialisation.Arduino_SPI_init();
 
@@ -112,7 +89,8 @@ void loop() {
     char incomingByte = Serial.read();
     handle_keypress(incomingByte);
   }
-  doWiFiManager();
+  wm.process();
+  ArduinoOTA.handle();
 }  // App in threads only
 
 void TWAI_Processing_Task(void *pvParameters) {
@@ -139,9 +117,12 @@ void TWAI_Processing_Task(void *pvParameters) {
           contactor_time = millis();
           digitalWrite(PRECHARGE_PIN, contactor & 1);
           digitalWrite(MAIN_CONTACTOR_PIN, contactor >> 1);
-
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+          led.red(255).blue(0).green(0).update();
+#endif
           break;
         case 3:
+          if ((contactor_time + 1000) < millis()) { break; }  // slow transitions to 1000ms
           switch (contactor) {
             case 0:
               contactor = PRECHARGE;
@@ -149,6 +130,9 @@ void TWAI_Processing_Task(void *pvParameters) {
               Serial.println("Contactors commanded Precharge On");
               digitalWrite(PRECHARGE_PIN, contactor & 1);
               digitalWrite(MAIN_CONTACTOR_PIN, contactor >> 1);
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+              led.red(255).green(255).update();
+#endif
               break;
             case 1:
               contactor = PRECHARGE | MAIN;
@@ -160,6 +144,9 @@ void TWAI_Processing_Task(void *pvParameters) {
               digitalWrite(PRECHARGE_PIN, 0);
               Serial.println("Contactors commanded Precharge Off");
               contactor = MAIN;
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+              led.red(0).green(255).update();
+#endif
 
               break;
             default:
@@ -282,23 +269,28 @@ void TWAI_Task(void *pvParameters) {
     }
     // Check if tx messages are queued and transmit on bus
     while (xQueueReceive(tx_queue, (void *)&rxFrame, 5) == pdPASS) {
+      if (can_tx_stop) { continue; }
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+      led.clear();
+#endif
 #ifdef CAN_TX_INTERSPACE_MS
       vTaskDelay(pdMS_TO_TICKS(CAN_TX_INTERSPACE_MS));  // inter-txframe delay
 #endif
       vTaskDelay(pdMS_TO_TICKS(1));  // inter-txframe delay
-      if (!can_tx_stop) {
-        if (can_debug) {
-          Serial.printf("TX Frame ID: 0x%X, Data Length: %d, Data: ", rxFrame.identifier, rxFrame.data_length_code);
-          for (int i = 0; i < rxFrame.data_length_code; i++) {
-            Serial.printf("0x%0X ", rxFrame.data[i]);
-          }
-          Serial.println();
+      if (can_debug) {
+        Serial.printf("TX Frame ID: 0x%X, Data Length: %d, Data: ", rxFrame.identifier, rxFrame.data_length_code);
+        for (int i = 0; i < rxFrame.data_length_code; i++) {
+          Serial.printf("0x%0X ", rxFrame.data[i]);
         }
-        if (twai_transmit(&rxFrame, 20) != ESP_OK) {
-          Serial.println("Failed to dequeue tx message for transmission");
-        };
+        Serial.println();
       }
+      if (twai_transmit(&rxFrame, 20) != ESP_OK) {
+        Serial.println("Failed to dequeue tx message for transmission");
+      };
     }
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+    led.update();
+#endif
   }
   vTaskDelete(NULL);
 }
@@ -348,8 +340,7 @@ void handle_keypress(char incomingByte) {
     print_readings = !print_readings;
   }
   if (incomingByte == 's' || incomingByte == 'S') {
-    print_readings = false;
-    can_debug = false;
+    print_readings = can_debug = false;
     vTaskDelay(pdMS_TO_TICKS(100));
     eeprom_menu();
   }
@@ -370,16 +361,16 @@ void handle_keypress(char incomingByte) {
   }
 
   if (incomingByte == 'r' || incomingByte == 'R') {
-    Serial.println("Killing spi...");
+    Serial.println("Shutting down\n\rKilling spi...");
     vTaskDelete(spiTaskHandle);
+    digitalWrite(SHDNL_MAX17841_1, LOW);
     Serial.println("ISO bus down...");
-    Serial.println("Killing twai...");
     vTaskDelay(pdMS_TO_TICKS(100));  // Give some time for the message to be sent
     vTaskDelete(twaiTaskHandle);
+    Serial.println("Killing twai...");
     vTaskDelay(pdMS_TO_TICKS(100));  // Give some time for the message to be sent
     vTaskDelete(twaiprocessTaskHandle);
-    Serial.println("Rebooting the ESP in 1 second...");
-    digitalWrite(SHDNL_MAX17841_1, LOW);
+    Serial.println("Rebooting ESP32");
     ESP.restart();  // Reboot the ESP
   }
 }
@@ -389,32 +380,41 @@ void saveParamsCallback() {
   strcpy(mqtt_config.user, custom_mqtt_user.getValue());
   strcpy(mqtt_config.password, custom_mqtt_password.getValue());
   strcpy(mqtt_config.topic, custom_mqtt_topic.getValue());
-  saveMQTTConfig();
-  vTaskDelay(pdMS_TO_TICKS(1000));
-
-  Serial.print(custom_mqtt_server.getValue());
-  Serial.print(" stored as ");
-  Serial.println(mqtt_config.server);
-
   Serial.println("MQTT params stored");
+  saveMQTTConfig();
+
+  unsigned char max_soc = atoi(custom_max_soc.getValue());
+  unsigned char min_soc = atoi(custom_min_soc.getValue());
+  if ((max_soc <= 100) && (!max_soc) && (min_soc < max_soc) && (!min_soc)) {
+    config.max_soc = max_soc;
+    config.min_soc = min_soc;
+    Serial.println("SoC limit params changed");
+  }
+
+  unsigned char num_modules = atoi(custom_num_slaves.getValue());
+  unsigned char num_cells = atoi(custom_num_cells.getValue());
+  if ((num_modules <= 32) && (!num_modules) && (num_cells <= 14) && (!num_cells)) {
+    config.num_modules = num_modules;
+    config.cells_per_slave = num_cells;
+    Serial.println("Module array params changed");
+  }
+  saveConfig();
+  vTaskDelay(pdMS_TO_TICKS(1000));
+  handle_keypress('r');  // Gracefully reboot controller
 }
 
 ESP32MQTTClient mqttClient;
-void MQTT_task(void *pvParameters) {
+void STA_task(void *pvParameters) {
   while (WiFi.status() != WL_CONNECTED) {
     vTaskDelay(pdMS_TO_TICKS(10));  // low pri-task
   }
   unsigned long mqtt_time = 0;
   Serial.printf("MQTT Task: Connecting to %s @ %s\n\r", mqtt_config.user, mqtt_config.server);
   mqttClient.setURI(mqtt_config.server, mqtt_config.user, mqtt_config.password);
-  // char mqttClientName[50];
-  // uint64_t chipid = ESP.getEfuseMac();  // The chip ID is essentially the MAC address
-  // snprintf(mqttClientName, 50, "MAXIM-%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
   mqttClient.setMqttClientName(espClientName);
   mqttClient.enableLastWillMessage("lwt", "Maxim offline");
   mqttClient.setKeepAlive(30);
   mqttClient.loopStart();
-
 
   for (;;) {
     // ArduinoOTA.handle();
@@ -424,10 +424,14 @@ void MQTT_task(void *pvParameters) {
     if (inverter_data.soc == 0) { continue; }
     char *jsonChar = BMSDataToJson(inverter_data);
     mqttClient.publish(mqtt_config.topic, jsonChar, 0, false);
-    // Serial.printf("MQTT: %s = %s", custom_mqtt_topic.getValue(), jsonChar);
+// Serial.printf("MQTT: %s = %s\n\r", custom_mqtt_topic.getValue(), jsonChar);
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+    led.red(255).update();
+    vTaskDelay(pdMS_TO_TICKS(500));  // low pri-task
+    led.red(0).update();
+#endif
     free(jsonChar);
   }
-  // }
 }
 
 void onMqttConnect(esp_mqtt_client_handle_t client) {
@@ -453,6 +457,10 @@ char *BMSDataToJson(const BMS_Data &inverter_data) {
   for (int i = 0; i < inverter_data.num_modules + 1; i++) {
     errors.add(inverter_data.errors[i]);
   }
+  JsonArray die_temp = doc["die_temp"].to<JsonArray>();
+  for (int i = 0; i < inverter_data.num_modules + 1; i++) {
+    errors.add(inverter_data.die_temp[i]);
+  }
 
   doc["num_modules"] = static_cast<int>(inverter_data.num_modules);
   doc["num_bal_cells"] = static_cast<int>(inverter_data.num_bal_cells);
@@ -475,36 +483,76 @@ char *BMSDataToJson(const BMS_Data &inverter_data) {
   return jsonCharArray;
 }
 
-void doWiFiManager() {
-  // is auto timeout portal running
+bool setup_wifi() {
+  uint64_t chipid = ESP.getEfuseMac();
+  // Sets unique name
+  snprintf(espClientName, 50, "ESP32MAXIM-%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
+  ArduinoOTA.setHostname(espClientName);
 
-  wm.process();
-  if (portalRunning) {
-    wm.process();  // do processing
+  custom_mqtt_server.setValue(mqtt_config.server, strlen(mqtt_config.server));
+  custom_mqtt_user.setValue(mqtt_config.user, strlen(mqtt_config.user));
+  custom_mqtt_password.setValue(mqtt_config.password, strlen(mqtt_config.password));
+  custom_mqtt_topic.setValue(mqtt_config.topic, strlen(mqtt_config.topic));
+  custom_num_slaves.setValue(String(config.num_modules).c_str(), strlen(String(config.num_modules).c_str()));
+  custom_num_cells.setValue(String(config.cells_per_slave).c_str(), strlen(String(config.num_modules).c_str()));
+  custom_max_soc.setValue(String(config.max_soc).c_str(), strlen(String(config.max_soc).c_str()));
+  custom_min_soc.setValue(String(config.min_soc).c_str(), strlen(String(config.min_soc).c_str()));
 
-    // check for timeout
-    if ((millis() - startTime) > (timeout * 1000)) {
-      Serial.println("portaltimeout");
-      portalRunning = false;
-      if (startAP) {
-        wm.stopConfigPortal();
-      } else {
-        wm.stopWebPortal();
-      }
-    }
+  WiFi.mode(WIFI_STA);
+  wm.setConnectTimeout(60);
+  wm.setMinimumSignalQuality(15);
+  wm.addParameter(&custom_mqtt_server);
+  wm.addParameter(&custom_mqtt_user);
+  wm.addParameter(&custom_mqtt_password);
+  wm.addParameter(&custom_mqtt_topic);
+  wm.addParameter(&custom_num_slaves);
+  wm.addParameter(&custom_num_cells);
+  wm.addParameter(&custom_max_soc);
+  wm.addParameter(&custom_min_soc);
+
+  wm.setConfigPortalBlocking(false);
+  wm.setSaveParamsCallback(saveParamsCallback);
+
+  if (wm.autoConnect(espClientName)) {
+    Serial.println("WiFi STA connected");
+    wm.startWebPortal();
+    return true;
+  } else {
+    Serial.println("WiFi Configportal running");
+    wm.startConfigPortal();
+    return false;
   }
+}
 
-  // is configuration portal requested?
-  if (digitalRead(RESET_EEPROM_PIN) == LOW && (!portalRunning)) {
-    if (startAP) {
-      Serial.println("Button Pressed, Starting Config Portal");
-      wm.setConfigPortalBlocking(false);
-      wm.startConfigPortal();
-    } else {
-      Serial.println("Button Pressed, Starting Web Portal");
-      wm.startWebPortal();
-    }
-    portalRunning = true;
-    startTime = millis();
+void ota() {
+  while (WiFi.status() != WL_CONNECTED) {
+    vTaskDelay(pdMS_TO_TICKS(10));  // low pri-task
   }
+  ArduinoOTA
+    .onStart([]() {
+      String type;
+      if (ArduinoOTA.getCommand() == U_FLASH)
+        type = "sketch";
+      else  // U_SPIFFS
+        type = "filesystem";
+
+      // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+      Serial.println("Start updating " + type);
+    })
+    .onEnd([]() {
+      Serial.println("\nEnd");
+    })
+    .onProgress([](unsigned int progress, unsigned int total) {
+      Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+    })
+    .onError([](ota_error_t error) {
+      Serial.printf("Error[%u]: ", error);
+      if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+      else if (error == OTA_END_ERROR) Serial.println("End Failed");
+    });
+
+  ArduinoOTA.begin();
 }

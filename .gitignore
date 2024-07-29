@@ -1,5 +1,5 @@
 .vscode
 .DS_Store
-secrets.*
+.bin
 .zip
 screenlog.*

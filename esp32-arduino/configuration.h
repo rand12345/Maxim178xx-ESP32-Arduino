@@ -6,10 +6,10 @@
 #include "soc/gpio_sig_map.h"
 #include <EEPROM.h>
 
-// Factory settings - can be edited altered in EEPROM menu
+// Pack factory settings - some can be edited altered in EEPROM or WIFI menu
 
-#define F_EXPECTED_PACKS 18               //
-#define F_CELLS_PER_SLAVE 6              //
+#define F_EXPECTED_PACKS 18               // Important!
+#define F_CELLS_PER_SLAVE 6               // Important!
 #define F_PANIC_MAX_CELL_MILLIVOLTS 4250  // opens contactors
 #define F_MAX_CELL_MILLIVOLTS 4200        // shuts down charging
 #define F_MIN_CELL_MILLIVOLTS 3300        // opens contactors
@@ -17,39 +17,17 @@
 #define F_BALANCE_MV_THRESHOLD 3700       // pack will stop balancing when cells are under this value
 #define F_BALANCE_MV_HYS 10               // target cell delta in mV
 #define F_SHUNT_ON_TIME_MS 200            // duty cycle = 1000/ms (keep under 250ms - page 32 PDF)
-#define F_SLAVE_KWH 2.73
-#define F_MAX_SOC 100       // These values halt charging
-#define F_MIN_SOC 5         // and discharging
-#define F_MAX_CHARGE 35     // rate in amps - desired W/min pack volts
-#define F_MAX_DISCHARGE 35  // rate in amps
+#define F_SLAVE_KWH 2.73                  // kWh capaity of each slave module
+#define F_MAX_SOC 100                     // These values halt charging
+#define F_MIN_SOC 5                       // and discharging
+#define F_MAX_CHARGE 35                   // rate in amps - desired W/min pack volts
+#define F_MAX_DISCHARGE 35                // rate in amps
+#define F_VOLTAGE_DIVISOR 1               // Divides total pack volts for LV inverters
 
 
-// Pack configuration for non-consecutive cells
-// #define CELL_CONFIGURATION CELL1 | CELL2 | CELL3 | CELL4 | CELL8 | CELL9 | CELL10 | CELL11 // ZOE 2021 modular = 1-4, 8-11
-
-// GPIO
-#define sck 5
-#define miso 6
-#define mosi 4
-#define SS1 7                // chip select for MAX17841
-#define SS2 7                // Optional Slave select if Dual UART is used
-#define INT_MAX17841_1 8     // Interrupt pin for MAX17841 (unused)
-#define SHDNL_MAX17841_1 10  // Shut down pin for MAX17841 (essential)
 
 
-// CAN IDs for receiver
-#define CAB300a 0x3c0
-#define CAB300b 0x3c1
-#define CAB300c 0x3c2
-#define SAMSUNG_SDI 0x10
-#define FOX 0x1871
-#define GW 0x4200 
-#define LV_INVERTER 0x305
-
-#define PRECHARGE_DWELL_TIME_MS 200  // time between activating precharge and main contactors
-#define CAN_TX_INTERSPACE_MS 2       // time between subsequent transmitted CAN frames
-
-// Custom GPIO pins per module type
+// Custom GPIO pins per ESP32 module type
 #if CONFIG_IDF_TARGET_ESP32C6
 #define TWAI_TX_SIGNAL_IDX TWAI0_TX_IDX
 #define RESET_EEPROM_PIN 9
@@ -57,13 +35,40 @@
 #define MAIN_CONTACTOR_PIN 11
 #define CAN_TX_PIN 2
 #define CAN_RX_PIN 3
-#else
+#define sck 5
+#define miso 6
+#define mosi 4
+#define SS1 7                // chip select for MAX17841
+#define SS2 7                // Optional Slave select if Dual UART is used
+#define INT_MAX17841_1 8     // Optional interrupt pin for MAX17841 (unused)
+#define SHDNL_MAX17841_1 10  // Shut down pin for MAX17841 (essential)
+#elif CONFIG_IDF_TARGET_ESP32C3
 #define TWAI_TX_SIGNAL_IDX TWAI_TX_IDX
 #define RESET_EEPROM_PIN 3
 #define PRECHARGE_PIN 9
 #define MAIN_CONTACTOR_PIN 9
 #define CAN_TX_PIN 0
 #define CAN_RX_PIN 1
+#define sck 5
+#define miso 6
+#define mosi 4
+#define SS1 7
+#define SS2 7
+#define INT_MAX17841_1 8
+#define SHDNL_MAX17841_1 10
+#else  // All other ESP32 modules
+#define RESET_EEPROM_PIN 0
+#define PRECHARGE_PIN 9
+#define MAIN_CONTACTOR_PIN 9
+#define CAN_TX_PIN 4
+#define CAN_RX_PIN 2
+#define sck 18
+#define miso 19
+#define mosi 23
+#define SS1 22
+#define SS2 7
+#define INT_MAX17841_1 8
+#define SHDNL_MAX17841_1 5
 #endif
 
 
@@ -73,8 +78,25 @@
 // #define MAXIM_WATCHDOG  // Time window WDT_TIMEOUT_MS in which valid Maxim data must be received or ESP will be reset. Comment out to remove this safety.
 // #define INVERTER_WATCHDOG  // Time window WDT_TIMEOUT_MS in which valid inverter CAN frames must be received or ESP will be reset. Comment out to remove this safety.
 
-// ============ Do not edit below here
 
+// Pack configuration for non-consecutive cells
+// #define CELL_CONFIGURATION CELL1 | CELL2 | CELL3 | CELL4 | CELL8 | CELL9 | CELL10 | CELL11 // ZOE 2021 modular = 1-4, 8-11
+
+
+
+// ============ Do not edit below here ============
+
+// CAN IDs for receiver
+#define CAB300a 0x3c0
+#define CAB300b 0x3c1
+#define CAB300c 0x3c2
+#define SAMSUNG_SDI 0x10
+#define FOX 0x1871
+#define GW 0x4200
+#define LV_INVERTER 0x305
+
+#define PRECHARGE_DWELL_TIME_MS 200  // time between activating precharge and main contactors
+#define CAN_TX_INTERSPACE_MS 2       // time between subsequent transmitted CAN frames
 
 #define CELL1 (1 << 1)
 #define CELL2 (1 << 2)
@@ -93,10 +115,10 @@
 const int MQTT_EEPROM_LOCATION = 32;
 
 struct MQTTConfig {
-    char server[80];
-    char user[40];
-    char password[40];
-    char topic[40];
+  char server[80];
+  char user[40];
+  char password[40];
+  char topic[40];
 };
 
 const MQTTConfig defaultmqttConfig = {
@@ -146,7 +168,7 @@ const Configuration defaultConfig = {
   F_MIN_SOC,                    // min_soc
   F_MAX_CHARGE,                 // max_charge
   F_MAX_DISCHARGE,              // max_discharge
-  1,                            // pack_voltage_divisor
+  F_VOLTAGE_DIVISOR,            // pack_voltage_divisor
 };
 
 
@@ -155,7 +177,7 @@ const Configuration defaultConfig = {
 
 // make these into classes
 // *MQTTconfig getMQTTConfig();
-// void saveMQTTConfig(); 
+// void saveMQTTConfig();
 
 void loadConfig();
 void saveConfig();
