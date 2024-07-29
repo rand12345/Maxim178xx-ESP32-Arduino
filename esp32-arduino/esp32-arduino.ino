@@ -417,7 +417,6 @@ void STA_task(void *pvParameters) {
   mqttClient.loopStart();
 
   for (;;) {
-    // ArduinoOTA.handle();
     vTaskDelay(pdMS_TO_TICKS(10));  // low pri-task
     if ((mqtt_time + 5000) > millis()) { continue; }
     mqtt_time = millis();
@@ -446,22 +445,17 @@ void handleMQTT(void *handler_args, esp_event_base_t base, int32_t event_id, voi
   mqttClient.onEventCallback(event);
 }
 
-
-// Function to convert BMS_Data to JSON char pointer
 char *BMSDataToJson(const BMS_Data &inverter_data) {
-  // Create a JSON document
   JsonDocument doc;
   doc["timestamp"] = inverter_data.timestamp;
 
+  JsonArray die_temp = doc["die_temp"].to<JsonArray>();
   JsonArray errors = doc["errors"].to<JsonArray>();
-  for (int i = 0; i < inverter_data.num_modules + 1; i++) {
+  errors.add(inverter_data.errors[inverter_data.num_modules + 1]); // global errors first [0]
+  for (int i = 0; i < inverter_data.num_modules; i++) {
+    die_temp.add(inverter_data.die_temp[i]);
     errors.add(inverter_data.errors[i]);
   }
-  JsonArray die_temp = doc["die_temp"].to<JsonArray>();
-  for (int i = 0; i < inverter_data.num_modules + 1; i++) {
-    errors.add(inverter_data.die_temp[i]);
-  }
-
   doc["num_modules"] = static_cast<int>(inverter_data.num_modules);
   doc["num_bal_cells"] = static_cast<int>(inverter_data.num_bal_cells);
   doc["milliamps"] = inverter_data.milliamps;
@@ -479,7 +473,6 @@ char *BMSDataToJson(const BMS_Data &inverter_data) {
   // Allocate memory for char array and copy the string into it
   char *jsonCharArray = (char *)malloc(jsonString.length() + 1);
   strcpy(jsonCharArray, jsonString.c_str());
-
   return jsonCharArray;
 }
 
