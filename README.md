@@ -111,7 +111,7 @@ Before you begin, ensure you have the following libraries and tools installed:
 
 1. The ESP32 will reboot and attempt to connect to the WiFi network you configured.
 2. If the connection is successful, you will see "Connected to WiFi!" in the Serial Monitor of the Arduino IDE.
-3. Further settings can be modified by accessing the webpage of the device `http://10.0.1.5/param`.
+3. Further settings can be modified by accessing the webpage of the device `http://<IP>/`.
 4. The IP address of the ESP32 will be visible in the Arduino IDE for OTA updates.
 
 ## Usage 🚀
