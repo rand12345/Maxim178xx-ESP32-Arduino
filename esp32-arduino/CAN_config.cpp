@@ -1,8 +1,13 @@
+#include <sys/_stdint.h>
+#include <string.h>
+#include "Arduino.h"
 #include "CAN_config.h"
 #include <freertos/FreeRTOS.h>
 #include "esp_err.h"
 #include "esp_log.h"
 #include <esp_task_wdt.h>
+
+
 
 void CanBus::summary(BMS_Data *local_result, bool show) {
   print_readings = show;
@@ -45,52 +50,33 @@ char CanBus::canread(twai_message_t rxFrame, QueueHandle_t tx_queue, BMS_Data *l
     case CAB300b:
     case CAB300c:
       CAB300(rxFrame);
-      return (inverter_sent | (no_errors << 1));
       break;
-
     case SAMSUNG_SDI:
       SAMSUNGSDI(rxFrame);
-      return (inverter_sent | (no_errors << 1));
       break;
+  }
 
+  if (has_errors(local_result)) {
+    no_errors = false;
+    Serial.println("Inv CAN send rejected - errors in battery data");
+    return (inverter_sent | (no_errors << 1));
+  }
+
+  inverter_sent = true;
+  switch (rxFrame.identifier) {
     case FOX:
-      if (has_errors(local_result)) {
-        no_errors = false;
-        break;
-      }
-      if (!check(local_result)) {
-        return (inverter_sent | (no_errors << 1));
-      }
       BMS_ComHV(local_result, rxFrame, tx_queue);
       break;  // ignore other frames on this ID
     case GW:
-      if (has_errors(local_result)) {
-        no_errors = false;
-        break;
-      }
-      if (!check(local_result)) {
-        return (inverter_sent | (no_errors << 1));
-      }
       BMS_ComHV_GW(local_result, rxFrame, tx_queue);
       break;
-
     case LV_INVERTER:
-      if (has_errors(local_result)) {
-        no_errors = false;
-        break;
-      }
       BMS_ComLV(local_result, tx_queue);
-      inverter_sent = true;
       break;
-
     default:
       // Unwanted CAN ID
       break;
   }
-
-  if (!no_errors)
-    Serial.println("Inv CAN send rejected - errors in battery data");
-
   return (inverter_sent | (no_errors << 1));
 }
 
@@ -119,8 +105,7 @@ void CanBus::SAMSUNGSDI(twai_message_t frame)  // Samsung Sensor
   CANmilliamps = r;
 }
 
-void CanBus::BMS_ComLV(BMS_Data *result, QueueHandle_t tx_queue)  // communication with LV BMS system over CAN
-{
+void CanBus::BMS_ComLV(BMS_Data *result, QueueHandle_t tx_queue) {  // communication with LV BMS system over CAN
   if (print_readings) {
     Serial.println("CAN SEND ================> Send LV Inverter Data");
   }
@@ -229,8 +214,7 @@ void CanBus::BMS_ComHV_Announce(BMS_Data *result, QueueHandle_t tx_queue) {
   send_to_queue(tx_queue, &tx_msg);
 }
 
-void CanBus::BMS_ComHV_Version(BMS_Data *result, QueueHandle_t tx_queue)  // communication with BMS system over CAN
-{
+void CanBus::BMS_ComHV_Version(BMS_Data *result, QueueHandle_t tx_queue) {  // communication with BMS system over CAN
   if (print_readings) {
     Serial.println("CAN SEND ================> Send HV Inverter Version Data");
   }
@@ -279,6 +263,7 @@ void CanBus::BMS_ComHV_Version(BMS_Data *result, QueueHandle_t tx_queue)  // com
     }
   }
 }
+
 void CanBus::BMS_ComHV_Cell_Data(BMS_Data *result, QueueHandle_t tx_queue) {
   if (print_readings) {
     Serial.println("CAN SEND ================> Send HV Inverter Cell Voltages");
@@ -299,6 +284,7 @@ void CanBus::BMS_ComHV_Cell_Data(BMS_Data *result, QueueHandle_t tx_queue) {
     send_to_queue(tx_queue, &tx_msg);
   }
 }
+
 void CanBus::BMS_ComHV_Temp_Data(BMS_Data *result, QueueHandle_t tx_queue) {
   if (print_readings) {
     Serial.println("CAN SEND ================> Send HV Temp Data");
@@ -318,6 +304,7 @@ void CanBus::BMS_ComHV_Temp_Data(BMS_Data *result, QueueHandle_t tx_queue) {
     send_to_queue(tx_queue, &tx_msg);
   }
 }
+
 void CanBus::BMS_ComHV_Pack_Data(BMS_Data *result, QueueHandle_t tx_queue) {
   if (print_readings) {
     Serial.println("CAN SEND ================> Send HV Slave Data");
@@ -339,8 +326,8 @@ void CanBus::BMS_ComHV_Pack_Data(BMS_Data *result, QueueHandle_t tx_queue) {
   }
 }
 
-void CanBus::BMS_ComHV_Data(BMS_Data *result, QueueHandle_t tx_queue)  // communication with BMS system over CAN
-{
+void CanBus::BMS_ComHV_Data(BMS_Data *result, QueueHandle_t tx_queue) {
+  // communication with BMS system over CAN
   if (print_readings) {
     Serial.println("CAN SEND ================> Send HV Inverter Data");
   }
@@ -456,8 +443,9 @@ void CanBus::BMS_ComHV_GW(BMS_Data *result, twai_message_t rxFrame, QueueHandle_
 void CanBus::BMS_GWHV_Data(BMS_Data *result, QueueHandle_t tx_queue) {
   // info https://github.com/stuartpittaway/diyBMSv4ESP32/blob/9a0a3ed26f2dc973d3faf3e2799a6688da3ab13e/ESPController/src/pylonforce_canbus.cpp
   // src https://github.com/JoeMudr/JoeMBMC/tree/072d2beff6c75bfb339139ffc936c3f1b63cede1
-  
-  const char batteryID = 1;
+
+  const char batteryID = 0;
+
   if (print_readings) {
     Serial.println("CAN SEND ================> Send HV GW Inverter Data");
   }
@@ -465,22 +453,22 @@ void CanBus::BMS_GWHV_Data(BMS_Data *result, QueueHandle_t tx_queue) {
   tx_msg.extd = 1;
   tx_msg.data_length_code = 8;
 
-  int current = (result->milliamps * 0.001) + 30000;
+  int current = (result->milliamps * 0.01) + 3000;  // A * 10 + 3000
   tx_msg.identifier = 0x4210 + batteryID;
-  tx_msg.data[0] = lowByte(short(result->pack_volts));
-  tx_msg.data[1] = highByte(short(result->pack_volts));
+  tx_msg.data[0] = lowByte(short(result->pack_volts) * 10);
+  tx_msg.data[1] = highByte(short(result->pack_volts) * 10);
   tx_msg.data[2] = lowByte(short(current));  // [ToDo] values > ~6500A will overflow!
   tx_msg.data[3] = highByte(short(current));
-  tx_msg.data[4] = lowByte(short(result->cell_temp_max));
-  tx_msg.data[5] = highByte(short(result->cell_temp_max));
+  tx_msg.data[4] = lowByte(short(result->cell_temp_max) + 100);
+  tx_msg.data[5] = highByte(short(result->cell_temp_max) + 100);
   tx_msg.data[6] = char(result->soc);
   tx_msg.data[7] = 100;  //soh
   send_to_queue(tx_queue, &tx_msg);
 
-  int max_pack_v = max_pack_voltage_cutoff();
-  int min_pack_v = low_pack_voltage_cutoff();
-  int charge = max_charge(result) + 30000;
-  int discharge = max_discharge(result) + 30000;
+  int max_pack_v = max_pack_voltage_cutoff() * 10;
+  int min_pack_v = low_pack_voltage_cutoff() * 10;
+  int charge = (max_charge(result) * 10) + 3000;
+  int discharge = (max_discharge(result) * 10) + 3000;
   tx_msg.identifier = 0x4220 + batteryID;
   tx_msg.data[0] = lowByte(short(max_pack_v));  // max pack v
   tx_msg.data[1] = highByte(short(max_pack_v));
@@ -492,7 +480,6 @@ void CanBus::BMS_GWHV_Data(BMS_Data *result, QueueHandle_t tx_queue) {
   tx_msg.data[7] = highByte(short(discharge));
   send_to_queue(tx_queue, &tx_msg);
 
-
   tx_msg.identifier = 0x4230 + batteryID;
   tx_msg.data[0] = lowByte(short(result->cell_mv_min));
   tx_msg.data[1] = highByte(short(result->cell_mv_min));
@@ -500,19 +487,18 @@ void CanBus::BMS_GWHV_Data(BMS_Data *result, QueueHandle_t tx_queue) {
   tx_msg.data[3] = highByte(short(result->cell_mv_max));
   tx_msg.data[4] = 0;  // MAX Single Battery Cell Voltage Number [ToDo]
   tx_msg.data[5] = 0;  // MAX Single Battery Cell Voltage Number [ToDo]
-  tx_msg.data[6] = 0;  // MIN Single Battery Cell Voltage Number [ToDo]
+  tx_msg.data[6] = 1;  // MIN Single Battery Cell Voltage Number [ToDo]
   tx_msg.data[7] = 0;  // MIN Single Battery Cell Voltage Number [ToDo]
   send_to_queue(tx_queue, &tx_msg);
 
-
   tx_msg.identifier = 0x4240 + batteryID;
-  tx_msg.data[0] = lowByte(short(result->cell_temp_max + 1000));
-  tx_msg.data[1] = lowByte(short(result->cell_temp_max + 1000));
-  tx_msg.data[2] = lowByte(short(result->cell_temp_min + 1000));
-  tx_msg.data[3] = lowByte(short(result->cell_temp_min + 1000));
+  tx_msg.data[0] = lowByte(short(result->cell_temp_max * 10 + 100));
+  tx_msg.data[1] = lowByte(short(result->cell_temp_max * 10 + 100));
+  tx_msg.data[2] = lowByte(short(result->cell_temp_min * 10 + 100));
+  tx_msg.data[3] = lowByte(short(result->cell_temp_min * 10 + 100));
   tx_msg.data[4] = 0;  // MAX Single Battery Cell Temperature Number [ToDo]
   tx_msg.data[5] = 0;  // MAX Single Battery Cell Temperature Number [ToDo]
-  tx_msg.data[6] = 0;  // MIN Single Battery Cell Temperature Number [ToDo]
+  tx_msg.data[6] = 1;  // MIN Single Battery Cell Temperature Number [ToDo]
   tx_msg.data[7] = 0;  // MIN Single Battery Cell VolTemperaturetage Number [ToDo]
   send_to_queue(tx_queue, &tx_msg);
 
@@ -553,10 +539,25 @@ void CanBus::BMS_GWHV_Data(BMS_Data *result, QueueHandle_t tx_queue) {
   tx_msg.data[7] = 0;                   // Protection same as Alarm? [ToDo]
   send_to_queue(tx_queue, &tx_msg);
 
-  //[??]
-  // MSG.id = 0x4260 + batteryID;  // Module Voltage MIN / MAX & Nr.
-  // MSG.id = 0x4270 + batteryID;  // Module Temp. MIN / MAX & Nr.
-  // MSG.id = 0x4280 + batteryID;  // Charge / Dischage foorbidden ?
+  tx_msg.identifier = 0x4280 + batteryID;
+  memset(tx_msg.data, 0, 8);
+  bool stop_charging = ((0 == max_charge(result)) || (char(result->soc) >= 100) || (result->cell_mv_max > config.max_cell_millivolts));
+  bool stop_discharging = ((0 == max_discharge(result)) || (char(result->soc) <= 0) || (result->cell_mv_min < config.min_cell_millivolts));
+  tx_msg.data[0] = stop_charging ? 0 : 0xAA;
+  tx_msg.data[2] = stop_discharging ? 0 : 0xAA;
+  send_to_queue(tx_queue, &tx_msg);
+
+  tx_msg.identifier = 0x4260 + batteryID;  // Module Voltage MIN / MAX & Nr.
+  memset(tx_msg.data, 0, 8);
+  uint16_t module_voltage = (result->num_modules / result->pack_volts) * 1000;
+  tx_msg.data[0] = lowByte(module_voltage + 1);
+  tx_msg.data[1] = highByte(module_voltage + 1);
+  tx_msg.data[2] = lowByte(module_voltage);
+  tx_msg.data[3] = highByte(module_voltage);
+  tx_msg.data[6] = 1;
+  send_to_queue(tx_queue, &tx_msg);
+
+  // tx_msg.identifier = 0x4270 + batteryID;  // Module Temp. MIN / MAX & Nr.
 }
 
 void CanBus::BMS_GWHV_Info(BMS_Data *result, QueueHandle_t tx_queue) {
@@ -579,16 +580,16 @@ void CanBus::BMS_GWHV_Info(BMS_Data *result, QueueHandle_t tx_queue) {
   tx_msg.data[7] = 0;  // Software Version ??
   send_to_queue(tx_queue, &tx_msg);
 
-  char num_slaves = char(result->pack_volts * 0.0104) + 1;  // 96v/pack
   tx_msg.identifier = 0x7320 + batteryID;
-  tx_msg.data[0] = num_slaves;
-  tx_msg.data[1] = 0;
-  tx_msg.data[2] = num_slaves;
-  tx_msg.data[3] = 0;  // [ToDo] Cells per module
-  tx_msg.data[4] = 0;  // Volage Level?
-  tx_msg.data[5] = 0;  // Volage Level?
-  tx_msg.data[6] = 0;  // AH Number?
-  tx_msg.data[7] = 0;  // AH NUmber?
+  int num_cells = config.num_modules * config.cells_per_slave;
+  tx_msg.data[0] = lowByte(num_cells);
+  tx_msg.data[1] = highByte(num_cells);
+  tx_msg.data[2] = config.num_modules;
+  tx_msg.data[3] = config.cells_per_slave;
+  tx_msg.data[4] = lowByte(((config.max_cell_millivolts - config.min_cell_millivolts) * num_cells));
+  tx_msg.data[5] = highByte(((config.max_cell_millivolts - config.min_cell_millivolts) * num_cells));
+  tx_msg.data[6] = lowByte(short(config.slave_kwh * 1000));
+  tx_msg.data[7] = highByte(short(config.slave_kwh * 1000));
   send_to_queue(tx_queue, &tx_msg);
 
 

@@ -1,10 +1,6 @@
 #ifndef ESP32_ARDUINO_H
 #define ESP32_ARDUINO_H
 
-#ifdef CONFIG_IDF_TARGET_ESP32C3
-#include "M5StampC3LED.h"
-M5StampC3LED led = M5StampC3LED();
-#endif
 
 #include <SPI.h>
 #include <stdarg.h>
@@ -17,9 +13,20 @@ M5StampC3LED led = M5StampC3LED();
 #include <ArduinoJson.h>
 #include <WiFiManager.h>  // https://github.com/tzapu/WiFiManager
 
-#include <ESPmDNS.h> // OTA
+#include <ESPmDNS.h>  // OTA
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+
+#ifdef RGBLED
+#include "M5StampC3LED.h"
+M5StampC3LED led = M5StampC3LED();
+#endif
+
+#ifdef MCP2515_CS
+#include <mcp2515.h>
+struct can_frame canMsg;
+MCP2515 mcp2515(MCP2515_CS);
+#endif
 
 WiFiManager wm;
 MQTTConfig mqtt_config;
@@ -43,6 +50,7 @@ TaskHandle_t wifiTaskHandle = NULL;
 #define MAIN 2
 #define ON 1
 twai_message_t rxFrame;
+twai_message_t canFrame;
 
 int modules = 0;
 int PEC_VALUE = 0;
@@ -51,6 +59,7 @@ int *SPI_return = 0;
 QueueHandle_t tx_queue, rx_queue;
 TaskHandle_t spiTaskHandle = NULL;
 TaskHandle_t twaiTaskHandle = NULL;
+TaskHandle_t canTaskHandle = NULL;
 TaskHandle_t twaiprocessTaskHandle = NULL;
 
 CanBus can_bus;
@@ -60,7 +69,7 @@ static const unsigned long starttime = millis();  // uptime counter
 static unsigned long contactor_time = 0;
 
 unsigned long previousMillis1000 = 0;
-const long interval1000 = 1000;  
+const long interval1000 = 1000;
 
 twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)CAN_TX_PIN, (gpio_num_t)CAN_RX_PIN, TWAI_MODE_NORMAL);
 twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();  // Look in the api-reference for other speed sets.
@@ -71,6 +80,8 @@ static bool driver_installed = false;
 Initialisation initialisation;
 PEC pec;
 BMS_SPI bms_SPI;
+
+
 
 void MQTT_task(void *pvParameters);
 char *BMSDataToJson(const BMS_Data &data);

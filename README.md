@@ -13,6 +13,7 @@ Before you begin, ensure you have the following libraries and tools installed:
 - [WiFiManager](https://github.com/tzapu/WiFiManager)
 - [Adafruit NeoPixel](https://github.com/adafruit/Adafruit_NeoPixel/)
 - [Espressif ESP32 3.0.x board manager](https://dl.espressif.com/dl/package_esp32_index.json)
+- [MCP2515 CAN \(Optional\)](https://github.com/autowp/arduino-mcp2515/)
 
 ## Setup Instructions 🛠️
 
@@ -88,9 +89,18 @@ Before you begin, ensure you have the following libraries and tools installed:
     #endif
     ```
 
+    Enable SPI MAX2515 CAN bus for current sensors
+
+    ```c
+    #define MCP2515_CS 10
+    ```
+
+    [ESP32-C6 Dual TWAI TBA](https://github.com/espressif/arduino-esp32/discussions/10107)
+
 5. **Compile and upload the code**:
     - Connect your ESP32 board to your computer.
     - Select the appropriate board and port in the Arduino IDE.
+    - Sketch -> Partition Scheme -> Minimal SPIFFS
     - Click on the `Upload` button.
 
 6. **Connect to the ESP32 Access Point**:

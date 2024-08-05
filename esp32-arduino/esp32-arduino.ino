@@ -26,23 +26,22 @@ void setup() {
   digitalWrite(MAIN_CONTACTOR_PIN, 0);
 
   Serial.begin(BAUDRATE);
-#ifdef CONFIG_IDF_TARGET_ESP32C3
+#ifdef RGBLED
   led.clear();
 #endif
 
   initializeEEPROM();
-#ifdef CONFIG_IDF_TARGET_ESP32C3
+#ifdef RGBLED
   led.red(255).update();
 #endif
 
   if (setup_wifi()) {
     ota();
     xTaskCreatePinnedToCore(STA_task, "STA_task", 8192, NULL, 1, &wifiTaskHandle, 0);
-
   } else {
     ap_mode = true;
   }
-#ifdef CONFIG_IDF_TARGET_ESP32C3
+#ifdef RGBLED
   if (ap_mode) {
     led.blue(255).update();
   } else {
@@ -74,6 +73,12 @@ void setup() {
   rx_queue = xQueueCreate(100, sizeof(twai_message_t));
   tx_queue = xQueueCreate(50, sizeof(twai_message_t));
   xTaskCreatePinnedToCore(TWAI_Task, "TWAI_Task", 4096, NULL, 6, &twaiTaskHandle, 0);
+#ifdef MCP2515_CS
+  mcp2515.reset();
+  mcp2515.setBitrate(CAN_500KBPS);
+  mcp2515.setNormalMode();
+  xTaskCreatePinnedToCore(SPI_CAN_Task, "SPI_CAN_Task", 4096, NULL, 6, &canTaskHandle, 0);
+#endif
   xTaskCreatePinnedToCore(TWAI_Processing_Task, "TWAI_Processing_Task", 4096, NULL, 4, &twaiprocessTaskHandle, 0);
 
   handle_keypress('?');  // display menu
@@ -92,6 +97,26 @@ void loop() {
   wm.process();
   ArduinoOTA.handle();
 }  // App in threads only
+
+#ifdef MCP2515_CS
+void SPI_CAN_Task(void *pvParameters) {
+  Serial.println("SPI_CAN_Task Start");
+  for (;;) {
+    vTaskDelay(pdMS_TO_TICKS(1));
+    if (mcp2515.readMessage(&canMsg) == MCP2515::ERROR_OK) {
+      // convert MCP canframe to twai struct and push to processing queue
+      canFrame.identifier = canMsg.can_id;
+      canFrame.data_length_code = canMsg.can_dlc;
+      for (int i = 0; i < canMsg.can_dlc; i++) {
+        canFrame.data[i] = canMsg.data[i];
+      }
+      if (xQueueSend(rx_queue, (void *)&canFrame, pdMS_TO_TICKS(10)) != pdPASS) {
+        Serial.println("MCP2515 -> rx_queue overflow");
+      }
+    }
+  }
+}
+#endif
 
 void TWAI_Processing_Task(void *pvParameters) {
   char contactor = 0;
@@ -117,7 +142,7 @@ void TWAI_Processing_Task(void *pvParameters) {
           contactor_time = millis();
           digitalWrite(PRECHARGE_PIN, contactor & 1);
           digitalWrite(MAIN_CONTACTOR_PIN, contactor >> 1);
-#ifdef CONFIG_IDF_TARGET_ESP32C3
+#ifdef RGBLED
           led.red(255).blue(0).green(0).update();
 #endif
           break;
@@ -130,7 +155,7 @@ void TWAI_Processing_Task(void *pvParameters) {
               Serial.println("Contactors commanded Precharge On");
               digitalWrite(PRECHARGE_PIN, contactor & 1);
               digitalWrite(MAIN_CONTACTOR_PIN, contactor >> 1);
-#ifdef CONFIG_IDF_TARGET_ESP32C3
+#ifdef RGBLED
               led.red(255).green(255).update();
 #endif
               break;
@@ -144,7 +169,7 @@ void TWAI_Processing_Task(void *pvParameters) {
               digitalWrite(PRECHARGE_PIN, 0);
               Serial.println("Contactors commanded Precharge Off");
               contactor = MAIN;
-#ifdef CONFIG_IDF_TARGET_ESP32C3
+#ifdef RGBLED
               led.red(0).green(255).update();
 #endif
 
@@ -263,14 +288,14 @@ void TWAI_Task(void *pvParameters) {
         }
         last_can_id = rxFrame.identifier;
         if (xQueueSend(rx_queue, (void *)&rxFrame, pdMS_TO_TICKS(10)) != pdPASS) {
-          Serial.println("rx_queue overflow");
+          Serial.println("TWAI -> rx_queue overflow");
         }
       }
     }
     // Check if tx messages are queued and transmit on bus
     while (xQueueReceive(tx_queue, (void *)&rxFrame, 5) == pdPASS) {
       if (can_tx_stop) { continue; }
-#ifdef CONFIG_IDF_TARGET_ESP32C3
+#ifdef RGBLED
       led.clear();
 #endif
 #ifdef CAN_TX_INTERSPACE_MS
@@ -288,7 +313,7 @@ void TWAI_Task(void *pvParameters) {
         Serial.println("Failed to dequeue tx message for transmission");
       };
     }
-#ifdef CONFIG_IDF_TARGET_ESP32C3
+#ifdef RGBLED
     led.update();
 #endif
   }
@@ -364,12 +389,6 @@ void handle_keypress(char incomingByte) {
     Serial.println("Shutting down\n\rKilling spi...");
     vTaskDelete(spiTaskHandle);
     digitalWrite(SHDNL_MAX17841_1, LOW);
-    Serial.println("ISO bus down...");
-    vTaskDelay(pdMS_TO_TICKS(100));  // Give some time for the message to be sent
-    vTaskDelete(twaiTaskHandle);
-    Serial.println("Killing twai...");
-    vTaskDelay(pdMS_TO_TICKS(100));  // Give some time for the message to be sent
-    vTaskDelete(twaiprocessTaskHandle);
     Serial.println("Rebooting ESP32");
     ESP.restart();  // Reboot the ESP
   }
@@ -424,7 +443,7 @@ void STA_task(void *pvParameters) {
     char *jsonChar = BMSDataToJson(inverter_data);
     mqttClient.publish(mqtt_config.topic, jsonChar, 0, false);
 // Serial.printf("MQTT: %s = %s\n\r", custom_mqtt_topic.getValue(), jsonChar);
-#ifdef CONFIG_IDF_TARGET_ESP32C3
+#ifdef RGBLED
     led.red(255).update();
     vTaskDelay(pdMS_TO_TICKS(500));  // low pri-task
     led.red(0).update();
@@ -451,7 +470,7 @@ char *BMSDataToJson(const BMS_Data &inverter_data) {
 
   JsonArray die_temp = doc["die_temp"].to<JsonArray>();
   JsonArray errors = doc["errors"].to<JsonArray>();
-  errors.add(inverter_data.errors[inverter_data.num_modules + 1]); // global errors first [0]
+  errors.add(inverter_data.errors[inverter_data.num_modules + 1]);  // global errors first [0]
   for (int i = 0; i < inverter_data.num_modules; i++) {
     die_temp.add(inverter_data.die_temp[i]);
     errors.add(inverter_data.errors[i]);

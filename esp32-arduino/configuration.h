@@ -24,8 +24,7 @@
 #define F_MAX_DISCHARGE 35                // rate in amps
 #define F_VOLTAGE_DIVISOR 1               // Divides total pack volts for LV inverters
 
-
-
+#define RGBLED // enable WS28xx LED
 
 // Custom GPIO pins per ESP32 module type
 #if CONFIG_IDF_TARGET_ESP32C6
@@ -57,6 +56,7 @@
 #define INT_MAX17841_1 8
 #define SHDNL_MAX17841_1 10
 #else  // All other ESP32 modules
+#undef RGBLED // no 1-wire RGB LED
 #define RESET_EEPROM_PIN 0
 #define PRECHARGE_PIN 9
 #define MAIN_CONTACTOR_PIN 9
@@ -71,6 +71,7 @@
 #define SHDNL_MAX17841_1 5
 #endif
 
+// #define MCP2515_CS 10 // enables second SPI CAN interface - comment out if not fitted - https://github.com/autowp/arduino-mcp2515
 
 // Timeouts
 #define DATA_TIMEOUT_MS 10000  // Time window in which **unique** cell data must be received from the Maxim interface
@@ -81,7 +82,6 @@
 
 // Pack configuration for non-consecutive cells
 // #define CELL_CONFIGURATION CELL1 | CELL2 | CELL3 | CELL4 | CELL8 | CELL9 | CELL10 | CELL11 // ZOE 2021 modular = 1-4, 8-11
-
 
 
 // ============ Do not edit below here ============
