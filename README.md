@@ -128,9 +128,11 @@ Before you begin, ensure you have the following libraries and tools installed:
 
 Once the setup is complete, your ESP32 should be ready to use with the configured libraries and settings. Ensure to customize the `configuration.h` file based on your specific requirements and hardware configuration.
 
-## Contributions 🤝
+## Contributions and thanks 🤝
 
 We welcome contributions to enhance this project. Feel free to fork the repository, make your changes, and submit a pull request.
+
+Thanks to [Patrick Prasse](https://github.com/stuartpittaway/diyBMSv4ESP32) and [Fozzy](https://github.com/FozzieUK/FoxESS-Canbus-Protocol) for their continued work on BMS CAN bus documentation which has provided needed background for this work.
 
 ## License 📜
 
