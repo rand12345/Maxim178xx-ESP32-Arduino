@@ -126,3 +126,7 @@ void Maxim::validate_cell_delta() {
     data->errors[data->num_modules + 1] |= ERROR_CELL_DELTA_HIGH;
   }
 }
+
+bool isIgnoreCell(char cell) {
+    return IGNORE_CELLS.find(cell) != IGNORE_CELLS.end();
+}

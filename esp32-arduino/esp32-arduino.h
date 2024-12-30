@@ -31,10 +31,10 @@ MCP2515 mcp2515(MCP2515_CS);
 WiFiManager wm;
 MQTTConfig mqtt_config;
 
-WiFiManagerParameter custom_mqtt_server("server", "MQTT server", "", 40);
-WiFiManagerParameter custom_mqtt_user("user", "MQTT user", "", 40);
-WiFiManagerParameter custom_mqtt_password("password", "MQTT password", "", 40);
-WiFiManagerParameter custom_mqtt_topic("topic", "MQTT topic", "", 80);
+WiFiManagerParameter custom_mqtt_server("server", "MQTT server", "10.0.1.2", 40);
+WiFiManagerParameter custom_mqtt_user("user", "MQTT user", "*******default*******", 40);
+WiFiManagerParameter custom_mqtt_password("password", "MQTT password", "*******default*******", 40);
+WiFiManagerParameter custom_mqtt_topic("topic", "MQTT topic", "*******default*******", 80);
 WiFiManagerParameter custom_num_slaves("18", "Number of slaves", "", 2);
 WiFiManagerParameter custom_num_cells("6", "Number of cells", "", 2);
 WiFiManagerParameter custom_max_soc("100", "Max SoC", "", 3);

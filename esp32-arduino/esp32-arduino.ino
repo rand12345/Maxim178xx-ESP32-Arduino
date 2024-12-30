@@ -500,11 +500,16 @@ bool setup_wifi() {
   // Sets unique name
   snprintf(espClientName, 50, "ESP32MAXIM-%04X%08X", (uint16_t)(chipid >> 32), (uint32_t)chipid);
   ArduinoOTA.setHostname(espClientName);
-
-  custom_mqtt_server.setValue(mqtt_config.server, strlen(mqtt_config.server));
-  custom_mqtt_user.setValue(mqtt_config.user, strlen(mqtt_config.user));
-  custom_mqtt_password.setValue(mqtt_config.password, strlen(mqtt_config.password));
-  custom_mqtt_topic.setValue(mqtt_config.topic, strlen(mqtt_config.topic));
+  const char*  default_str = "*******default********";
+  const char*  default_svr = "mqtt://0.0.0.0:1883";
+  custom_mqtt_server.setValue(default_svr, strlen(default_svr));
+  custom_mqtt_user.setValue(default_str, strlen(default_str));
+  custom_mqtt_password.setValue(default_str, strlen(default_str));
+  custom_mqtt_topic.setValue(default_str, strlen(default_str));
+  // custom_mqtt_server.setValue(mqtt_config.server, strlen(mqtt_config.server));
+  // custom_mqtt_user.setValue(mqtt_config.user, strlen(mqtt_config.user));
+  // custom_mqtt_password.setValue(mqtt_config.password, strlen(mqtt_config.password));
+  // custom_mqtt_topic.setValue(mqtt_config.topic, strlen(mqtt_config.topic));
   custom_num_slaves.setValue(String(config.num_modules).c_str(), strlen(String(config.num_modules).c_str()));
   custom_num_cells.setValue(String(config.cells_per_slave).c_str(), strlen(String(config.num_modules).c_str()));
   custom_max_soc.setValue(String(config.max_soc).c_str(), strlen(String(config.max_soc).c_str()));
@@ -524,6 +529,8 @@ bool setup_wifi() {
 
   wm.setConfigPortalBlocking(false);
   wm.setSaveParamsCallback(saveParamsCallback);
+
+  // wm.preloadWiFi("STA_SSID","STA_PASS");
 
   if (wm.autoConnect(espClientName)) {
     Serial.println("WiFi STA connected");

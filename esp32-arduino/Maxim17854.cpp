@@ -182,8 +182,8 @@ void Maxim852Device::cell_V() {
   const float CONVERSION = VOLTAGE_REF / VOLTAGE_REF_HEX;
   for (int module = 0; module < config.num_modules; module++) {
     for (char cell_pointer = ADDR_CELL1REG; cell_pointer < (ADDR_CELL1REG + config.cells_per_slave); cell_pointer++) {
+      if (isIgnoreCell(ADDR_CELL1REG - cell_pointer)) { continue; }
       SPI_return = spi_read(module, cell_pointer);
-      // for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
       unsigned short raw = ((SPI_return[2]) + (SPI_return[2 + 1] << 8) >> 2);  // local variable
       // important, reset min cell reference for balancing LV ADV val at begining of sampling of first slave
       // +10mv = +33 adc
@@ -227,6 +227,7 @@ void Maxim852Device::cell_V() {
 // void Maxim852Device::cell_V() {
 //   const float CONVERSION = VOLTAGE_REF / VOLTAGE_REF_HEX;
 //   for (char cell_pointer = ADDR_CELL1REG; cell_pointer < ADDR_CELL1REG + config.cells_per_slave; cell_pointer++) {
+//     if (isIgnoreCell (ADDR_CELL1REG - cell_pointer)) { continue; }
 //     int module = 0;
 //     SPI_return = spi_read(ALL, cell_pointer);
 //     for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
@@ -371,7 +372,7 @@ void Maxim852Device::calc_balance_bits(char module) {
 }
 
 void Maxim852Device::do_balance() {
-for (int balance_counter = 0; balance_counter < 3; balance_counter++) {
+  for (int balance_counter = 0; balance_counter < 3; balance_counter++) {
     if (balance_counter == 2) {
       SPI_return = spi_read(ALL, ADDR_BALSTAT);
       unsigned short raw = SPI_return[2] | (short)SPI_return[3] << 8;

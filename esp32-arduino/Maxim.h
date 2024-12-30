@@ -5,6 +5,7 @@
 #include "bms_SPI.h"
 #include "Max17841.h"
 #include "configuration.h"
+#include <set>
 
 #define MAX_SLAVES 32
 #define MAX_SLAVE_TEMP 100  // Maxim die temp
@@ -228,6 +229,7 @@ inline void print_shunts(unsigned short value);
 inline void print_b16(unsigned short value);
 bool cell_balance_conditions(short min_cell, short cell_mv);
 void cell_debug(const BMS_Data *local_result);
+bool isIgnoreCell(char cell);
 
 // 852
 float calculateTemperature(uint16_t value);

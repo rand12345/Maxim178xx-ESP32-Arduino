@@ -5,6 +5,7 @@
 #include "esp_rom_gpio.h"
 #include "soc/gpio_sig_map.h"
 #include <EEPROM.h>
+#include <set>
 
 // Pack factory settings - some can be edited altered in EEPROM or WIFI menu
 
@@ -24,7 +25,7 @@
 #define F_MAX_DISCHARGE 35                // rate in amps
 #define F_VOLTAGE_DIVISOR 1               // Divides total pack volts for LV inverters
 
-#define RGBLED // enable WS28xx LED
+#define RGBLED  // enable WS28xx LED
 
 // Custom GPIO pins per ESP32 module type
 #if CONFIG_IDF_TARGET_ESP32C6
@@ -55,8 +56,8 @@
 #define SS2 7
 #define INT_MAX17841_1 8
 #define SHDNL_MAX17841_1 10
-#else  // All other ESP32 modules
-#undef RGBLED // no 1-wire RGB LED
+#else          // All other ESP32 modules
+#undef RGBLED  // no 1-wire RGB LED
 #define RESET_EEPROM_PIN 0
 #define PRECHARGE_PIN 9
 #define MAIN_CONTACTOR_PIN 9
@@ -110,6 +111,8 @@
 #define CELL10 (1 << 10)
 #define CELL11 (1 << 11)
 #define CELL12 (1 << 12)
+
+const std::set<char> IGNORE_CELLS = { 16, 17 };  // Used for skipping over unconnected cells (Renault)
 
 #define EEPROM_SIZE 512  // Define the size of the EEPROM
 const int MQTT_EEPROM_LOCATION = 32;
