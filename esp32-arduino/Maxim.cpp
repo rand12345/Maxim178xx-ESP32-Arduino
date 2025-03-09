@@ -127,6 +127,16 @@ void Maxim::validate_cell_delta() {
   }
 }
 
+uint8_t top_cell(short value) {
+  for (int i = 15; i >= 0; i--) {  // Iterate in reverse from 7 to 0
+    if (value & (1 << i)) {
+      return i + 1;
+    }
+  }
+  return 0;
+}
+
+
 bool isIgnoreCell(char cell) {
-    return IGNORE_CELLS.find(cell) != IGNORE_CELLS.end();
+  return IGNORE_CELLS.find(cell) != IGNORE_CELLS.end();
 }

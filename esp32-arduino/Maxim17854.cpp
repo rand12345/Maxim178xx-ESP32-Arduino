@@ -180,8 +180,15 @@ void Maxim852Device::read_cell_temp() {
 
 void Maxim852Device::cell_V() {
   const float CONVERSION = VOLTAGE_REF / VOLTAGE_REF_HEX;
+    short call_mask;
+#ifdef CELL_CONFIGURATION
+  call_mask = CELL_CONFIGURATION;
+#else
+  call_mask = (1 << config.cells_per_slave) - 1;  // 4 cells = 0b000000001111
+#endif
+  short topcell = top_cell(short(call_mask));
   for (int module = 0; module < config.num_modules; module++) {
-    for (char cell_pointer = ADDR_CELL1REG; cell_pointer < (ADDR_CELL1REG + config.cells_per_slave); cell_pointer++) {
+    for (char cell_pointer = ADDR_CELL1REG; cell_pointer < (ADDR_CELL1REG + topcell); cell_pointer++) {
       if (isIgnoreCell(ADDR_CELL1REG - cell_pointer)) { continue; }
       SPI_return = spi_read(module, cell_pointer);
       unsigned short raw = ((SPI_return[2]) + (SPI_return[2 + 1] << 8) >> 2);  // local variable

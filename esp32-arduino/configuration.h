@@ -9,14 +9,14 @@
 
 // Pack factory settings - some can be edited altered in EEPROM or WIFI menu
 
-#define F_EXPECTED_PACKS 18               // Important!
+#define F_EXPECTED_PACKS 2               // Important!
 #define F_CELLS_PER_SLAVE 6               // Important!
 #define F_PANIC_MAX_CELL_MILLIVOLTS 4250  // opens contactors
 #define F_MAX_CELL_MILLIVOLTS 4200        // shuts down charging
 #define F_MIN_CELL_MILLIVOLTS 3300        // opens contactors
 #define F_DELTA_CELL_MILLIVOLTS_MAX 100   // max cell imbalance
 #define F_BALANCE_MV_THRESHOLD 3700       // pack will stop balancing when cells are under this value
-#define F_BALANCE_MV_HYS 10               // target cell delta in mV
+#define F_BALANCE_MV_HYS 2                // target cell delta in mV
 #define F_SHUNT_ON_TIME_MS 200            // duty cycle = 1000/ms (keep under 250ms - page 32 PDF)
 #define F_SLAVE_KWH 2.73                  // kWh capaity of each slave module
 #define F_MAX_SOC 100                     // These values halt charging

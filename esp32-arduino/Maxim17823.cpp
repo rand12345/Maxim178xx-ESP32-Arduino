@@ -1,6 +1,8 @@
 #include "Maxim.h"
 #include "Max17823.h"
 
+
+
 bool Maxim823Device::clear_status_fmea() {
   Serial.println("Init Max17823");
   // SPI TRANSACTION : WRITE ADDR_STATUS1 TO 0X00 TO CLEAR FLAGS
@@ -25,7 +27,7 @@ bool Maxim823Device::enable_measurement() {
 #ifdef CELL_CONFIGURATION
   reg_val = CELL_CONFIGURATION;
 #else
-  reg_val = (1 << config.cells_per_slave) - 1;  // 4 cells = 0b000000001111
+  reg_val = (1 << config.cells_per_slave) - 1;    // 4 cells = 0b000000001111
 #endif
   reg_val |= (1 << 15);  // Connects the voltage divider to the VBLKP pin. Must be enabled prior to the VBLOCK measurement
   reg_val |= (1 << 14);  // Enables measurement of the VBLKP input in the acquisition mode
@@ -35,7 +37,8 @@ bool Maxim823Device::enable_measurement() {
   delay(1);
   spi_read(ALL, ADDR_MEASUREEN);
 
-  reg_val = config.cells_per_slave & 0xf;
+  // reg_val = config.cells_per_slave & 0xf; // xxxx not correct, must be cell_mask's highest 1
+  reg_val = top_cell(short(reg_val));
   spi_write(ALL, ADDR_TOPCELL, reg_val);
   delay(1);
   spi_read(ALL, ADDR_TOPCELL);
@@ -59,6 +62,10 @@ bool Maxim823Device::enable_measurement() {
 }
 
 bool Maxim823Device::single_scan() {
+
+  spi_write(ALL, ADDR_BALSWEN, OFF);  // turn off shunts for voltage measurement
+  vTaskDelay(pdMS_TO_TICKS(1));
+
   short reg_val = STARTSCAN | X8OVERSAMPLE;  // x8 oversample
   spi_write(ALL, ADDR_SCANCTRL, reg_val);
   int counter = 0;
@@ -66,7 +73,8 @@ bool Maxim823Device::single_scan() {
     vTaskDelay(pdMS_TO_TICKS(5));
     SPI_return = spi_read(ALL, ADDR_SCANCTRL);
     char modules = 0;
-    for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
+    // for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
+    for (char idx = (data->num_modules * 2); idx >= 2; idx -= 2) {  // readall
       unsigned short raw = (SPI_return[idx]) + (SPI_return[idx + 1] << 8);
       if ((raw & 0x8000) && (raw & 0x2000)) { modules++; };
     }
@@ -80,7 +88,8 @@ void Maxim823Device::read_die_temp() {
   const float CONV = (230700.0 / 5029581.0);
   SPI_return = spi_read(ALL, ADDR_DIAGREG);
   int module = 0;
-  for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
+  // for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
+  for (char idx = (data->num_modules * 2); idx >= 2; idx -= 2) {  // readall
     unsigned short raw = (SPI_return[idx]) + (SPI_return[idx + 1] << 8);
     float temp = ((raw >> 2) * CONV) - 273.0;  // Calculation
     data->die_temp[module] = (int16_t)temp;
@@ -90,7 +99,8 @@ void Maxim823Device::read_die_temp() {
 void Maxim823Device::read_cell_temp() {
   SPI_return = spi_read(ALL, ADDR_AIN1);
   int module = 0;
-  for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
+  // for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
+  for (char idx = (data->num_modules * 2); idx >= 2; idx -= 2) {  // readall
     unsigned short raw = (SPI_return[idx]) + (SPI_return[idx + 1] << 8);
     float temp = ((raw >> 4) - 1680) * 0.03125;
     data->cell_temp[module] = (int16_t)temp;
@@ -110,10 +120,19 @@ void Maxim823Device::read_cell_temp() {
 
 void Maxim823Device::cell_V() {
   const float CONVERSION = VOLTAGE_REF / VOLTAGE_REF_HEX;
-  for (char cell_pointer = ADDR_CELL1REG; cell_pointer < ADDR_CELL1REG + config.cells_per_slave; cell_pointer++) {
+  short call_mask;
+#ifdef CELL_CONFIGURATION
+  call_mask = CELL_CONFIGURATION;
+#else
+  call_mask = (1 << config.cells_per_slave) - 1;  // 4 cells = 0b000000001111
+#endif
+  short topcell = top_cell(short(call_mask));
+  for (char cell_pointer = ADDR_CELL1REG; cell_pointer < ADDR_CELL1REG + topcell; cell_pointer++) {
+    if (isIgnoreCell(ADDR_CELL1REG - cell_pointer)) { continue; }
     int module = 0;
     SPI_return = spi_read(ALL, cell_pointer);
-    for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
+    // for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
+    for (char idx = (data->num_modules * 2); idx >= 2; idx -= 2) {                 // readall
       unsigned short raw = ((SPI_return[idx]) + (SPI_return[idx + 1] << 8) >> 2);  // local variable
       // important, reset min cell reference for balancing LV ADV val at begining of sampling first slave
 
@@ -159,7 +178,8 @@ void Maxim823Device::block_V() {
   const float CONVERSION = FULL_SCALE_DCIN / FULL_SCALE_DCIN_HEX;
   SPI_return = spi_read(ALL, ADDR_BLOCKREG);
   char module = 0;
-  for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
+  // for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
+  for (char idx = (data->num_modules * 2); idx >= 2; idx -= 2) {          // readall
     unsigned short raw = (SPI_return[idx]) + (SPI_return[idx + 1] << 8);  // local variable
     float block_voltage = (raw >> 2) * CONVERSION;
     data->pack_volts += block_voltage;
@@ -178,7 +198,8 @@ void Maxim823Device::block_V() {
 
 void Maxim823Device::read_balance() {
   SPI_return = spi_read(ALL, ADDR_BALSWEN);
-  for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
+  // for (char idx = 2; idx < ((data->num_modules * 2) + 2); idx = idx + 2) {
+  for (char idx = (data->num_modules * 2); idx >= 2; idx -= 2) {  // readall
     for (int i = 0; i < data->num_modules; i++) {
       if (i % 3 == 0) {
         Serial.println();
@@ -202,49 +223,48 @@ void Maxim823Device::calc_balance_bits(char module) {
     if (cell_balance_conditions(data->cell_mv_min, cell_mv)) {
       // If this cell is within the hysteresis of the lowest cell and above the minimum balance voltage threshold then mark it for balancing.
       data->balance_bits[module] |= 1 << cell;
-      data->num_bal_cells++;
     }
   }
 }
 
 void Maxim823Device::do_balance() {
-  for (int balance_counter = 0; balance_counter < 3; balance_counter++) {
-    if (balance_counter == 2) {
-      SPI_return = spi_read(ALL, ADDR_WATCHDOG);
-      unsigned short raw = SPI_return[2] | (short)SPI_return[3] << 8;
-      char cbtimer = ((raw & 0xF00) >> 8);
-      if ((cbtimer < 3) && (data->cell_mv_min > config.balance_mv_threshold)) {
-        short reg_val = (10 << 8) | (2 << 12);   // cbtimer = x10 & cbpdiv = 16–240s
-        spi_write(ALL, ADDR_WATCHDOG, reg_val);  // Bal watchdog reset
-      }
-      spi_write(ALL, ADDR_BALSWEN, OFF);  // turn off shunts for voltage measurement
-      return;
-    }
-    unsigned short bits = 0;
-    // Counter is cyclical over 1 second and is generated in the main lool (0->3). Each step represents 250ms.
-    if (data->cell_mv_max < config.balance_mv_threshold) {  // Whole pack
-      for (char module = 0; module < data->num_modules; module++) {
-        data->balance_bits[module] = 0;  // Clear all balance status
-        bits_remainder[module] = 0;      // clear all
-      }
-      spi_write(ALL, ADDR_BALSWEN, OFF);
-      return;
-    }
+  data->num_bal_cells = 0;
+  SPI_return = spi_read(ALL, ADDR_WATCHDOG);
+  unsigned short raw = SPI_return[2] | (short)SPI_return[3] << 8;
+  char cbtimer = ((raw & 0xF00) >> 8);
+  if ((cbtimer < 3) && (data->cell_mv_min > config.balance_mv_threshold)) {
+    short reg_val = (10 << 8) | (2 << 12);   // cbtimer = x10 & cbpdiv = 16–240s // you sure about this value?
+    spi_write(ALL, ADDR_WATCHDOG, reg_val);  // Bal watchdog reset
 
     for (char module = 0; module < data->num_modules; module++) {
-      if (balance_counter == 0) {
-        calc_balance_bits(module);
-      }
-      if (data->die_temp[module] > 100) {  // Check module die overtemp
-        Serial.printf("SHUNT OVERTEMP! IC temp: %dºC  Switching off module %d shunts | ", data->die_temp[module], module + 1);
-        data->balance_bits[module] = 0;  // Clear all balance status
-        bits_remainder[module] = 0;      // clear all
-      }
-      bits = toggle_adjacent_bits(data->balance_bits[module], &bits_remainder[module]);
-      spi_write(module, ADDR_BALSWEN, bits);
-    }
-    vTaskDelay(pdMS_TO_TICKS(config.shunt_on_time_ms));
+      calc_balance_bits(module);
+    }  // calc new balance shunts
   }
+
+
+  unsigned short bits = 0;
+  // Counter is cyclical over 1 second and is generated in the main lool (0->3). Each step represents 250ms.
+  if (data->cell_mv_max < config.balance_mv_threshold) {  // Whole pack
+    for (char module = 0; module < data->num_modules; module++) {
+      data->balance_bits[module] = 0;  // Clear all balance status
+      bits_remainder[module] = 0;      // clear all
+    }
+    spi_write(ALL, ADDR_BALSWEN, OFF);
+    return;
+  }
+
+  for (char module = 0; module < data->num_modules; module++) {
+    if (data->die_temp[module] > 100) {  // Check module die overtemp
+      Serial.printf("SHUNT OVERTEMP! IC temp: %dºC  Switching off module %d shunts | ", data->die_temp[module], module + 1);
+      data->balance_bits[module] = 0;  // Clear all balance status
+      bits_remainder[module] = 0;      // clear all
+    }
+    bits = toggle_adjacent_bits(data->balance_bits[module], &bits_remainder[module]);
+    spi_write(module, ADDR_BALSWEN, bits);
+    data->num_bal_cells += __builtin_popcount(bits);
+  }
+  vTaskDelay(pdMS_TO_TICKS(config.shunt_on_time_ms));
+  //
 }
 
 void Maxim823Device::calculate_soc() {

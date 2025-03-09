@@ -99,6 +99,15 @@ protected:
     bms_SPI.SPI_commands(1, WR_NXT_LD_Q0);
     vTaskDelay(pdMS_TO_TICKS(config.num_modules));
     SPI_return = bms_SPI.SPI_read_register(read_num, RD_NXT_MSG);
+
+
+    // Serial.printf("Read C: %x, Reg: %x \n\r", command, reg);
+    // Serial.printf("Rx ");
+    for (char i = 0; i < 8; i++) {
+      // Serial.printf("%x, ", SPI_return[i]);
+    }
+    // Serial.printf("\n\r");
+
     // SPI command for Read Load Que
     if (!pec.pec_check(8, SPI_return)) {
       Serial.printf("Rx PEC fail: ");
@@ -130,6 +139,14 @@ protected:
     bms_SPI.SPI_commands(1, WR_NXT_LD_Q0);
     vTaskDelay(pdMS_TO_TICKS(1));
     SPI_return = bms_SPI.SPI_read_register(8, RD_NXT_MSG);
+
+    // Serial.printf("Tx C: %x, Reg: %x Val: %x%x \n\r", command, reg, msb, lsb);
+    // Serial.printf("Rx ");
+    for (char i = 0; i < 8; i++) {
+      // Serial.printf("%x, ", SPI_return[i]);
+    }
+    // Serial.printf("\n\r");
+
     if (!pec.pec_check(8, SPI_return)) {
       Serial.printf("Tx PEC fail: ");
       for (char i = 0; i < 8; i++) {
@@ -147,7 +164,8 @@ protected:
 
 private:
 
-  static DeviceModel detect_device() {
+  static DeviceModel
+  detect_device() {
     Serial.println("Detecting Maxim model");
     SPI_return = spi_read(ALL, 0x0);
     short model = ((SPI_return[2] | short(SPI_return[3] << 8)) >> 4) & 0xfff;
@@ -230,6 +248,7 @@ inline void print_b16(unsigned short value);
 bool cell_balance_conditions(short min_cell, short cell_mv);
 void cell_debug(const BMS_Data *local_result);
 bool isIgnoreCell(char cell);
+uint8_t top_cell(short value);
 
 // 852
 float calculateTemperature(uint16_t value);
