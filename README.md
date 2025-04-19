@@ -1,4 +1,4 @@
-# Maxim MAX17841b, MAX17823 and MAX17845 battery emulator
+# Maxim MAX17841b, MAX17823 and MAX17845 module controller with battery emulator
 
 Currently tested on Opal/Peugeot/Citroen (MAX17845), and Range Rover/BMW (MAX17823) lithium packs.
 
