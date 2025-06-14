@@ -24,4 +24,6 @@ private:
   // bool spi_transaction(char reg, char lowbyte, char highbyte);
 };
 extern Initialisation initialisation;
+int *spi_read(char module, char reg);
+int *spi_write(char module, char reg, short reg_data);
 #endif
