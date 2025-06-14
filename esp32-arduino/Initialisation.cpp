@@ -56,12 +56,12 @@ int Initialisation::helloall() {
     Serial.printf("Number of slaves in daisy chain is: %d\n\r", module);
     return module;
   }
-  
+
   Serial.printf("HELLOALL failed - attempting MAX17823b internal loopback check\n\r");
   const char DEVCFG2 = 0x1b;
   const short LASTLOOP_ENABLE = 0x8000;
   const short LASTLOOP_DISABLE = 0x0000;
-  const char NUM_MODULES = 3;  // MANUALLY SET WHILST TESTING
+  const char NUM_MODULES = 16;  // MANUALLY SET WHILST TESTING
   for (char i = 0; i < 32; i++) {
     spi_write(ALL, DEVCFG2, LASTLOOP_DISABLE);
     bms_SPI.SPI_commands(1, CLR_RX_BUF);  // Clear after loopback
